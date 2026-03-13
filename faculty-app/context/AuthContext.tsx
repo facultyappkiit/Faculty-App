@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { getPushTokenStatus, updatePushToken } from '../services/api';
-import { initializeNotifications, registerForPushNotificationsAsync } from '../services/notifications';
+import { getPushTokenStatus, sendPushTokenDebug, updatePushToken } from '../services/api';
+import { getLastPushDebugState, getPushDebugDetails, initializeNotifications, registerForPushNotificationsAsync } from '../services/notifications';
 
 interface User {
   id: number;
@@ -85,6 +85,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         await AsyncStorage.setItem('pushToken', pushToken);
       } else {
         console.warn('[Push] No token generated. Check notification permission, FCM credentials, and build type.');
+
+        const debugState = getLastPushDebugState();
+        const debugDetails = getPushDebugDetails();
+        console.log('[Push] Debug state from notifications module:', debugState);
+        console.log('[Push] Debug details:', debugDetails);
+
+        // Send debug state to backend so it appears in Render logs.
+        await sendPushTokenDebug(userId, debugDetails);
 
         // Run one more status call for visibility in Render logs and confirmation.
         try {

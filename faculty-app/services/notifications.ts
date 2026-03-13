@@ -9,6 +9,26 @@ const PROJECT_ID =
   Constants.easConfig?.projectId ??
   'ed1e64f3-437b-4909-b789-f85fdc03f788';
 
+let lastPushDebugState = 'not_started';
+let lastPermissionStatus = 'unknown';
+let lastPushError = '';
+
+export function getLastPushDebugState(): string {
+  return lastPushDebugState;
+}
+
+export function getPushDebugDetails() {
+  return {
+    state: lastPushDebugState,
+    permission: lastPermissionStatus,
+    lastError: lastPushError,
+    projectId: PROJECT_ID,
+    executionEnvironment: Constants.executionEnvironment,
+    isDevice: Device.isDevice,
+    platform: Platform.OS,
+  };
+}
+
 function isExpoGo(): boolean {
   return Constants.executionEnvironment === 'storeClient';
 }
@@ -45,17 +65,22 @@ export function initializeNotifications(): void {
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
   // Skip on web
   if (Platform.OS === 'web') {
+    lastPushDebugState = 'web_platform';
+    lastPermissionStatus = 'web';
     return null;
   }
 
   // Must be a physical device
   if (!Device.isDevice) {
+    lastPushDebugState = 'not_physical_device';
+    lastPermissionStatus = 'not_applicable';
     console.warn('[Notifications] Push notifications require a physical device');
     return null;
   }
 
   try {
     if (!PROJECT_ID) {
+      lastPushDebugState = 'missing_project_id';
       console.error('[Notifications] Missing EAS projectId; cannot request Expo push token');
       return null;
     }
@@ -76,15 +101,18 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     // Check and request permissions
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
+    lastPermissionStatus = existingStatus;
     console.log('[Notifications] Existing permission status:', existingStatus);
 
     if (existingStatus !== 'granted') {
       const { status } = await Notifications.requestPermissionsAsync();
       finalStatus = status;
+      lastPermissionStatus = status;
       console.log('[Notifications] Permission request result:', status);
     }
 
     if (finalStatus !== 'granted') {
+      lastPushDebugState = `permission_${finalStatus}`;
       console.warn('[Notifications] Permission not granted');
       return null;
     }
@@ -99,10 +127,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
         });
 
         console.log('[Notifications] Expo push token generated:', tokenResponse.data);
+        lastPushDebugState = 'token_generated';
         return tokenResponse.data;
       } catch (error) {
         lastError = error;
+        lastPushError = String(error);
         console.warn(`[Notifications] Token request attempt ${attempt} failed:`, error);
+        lastPushDebugState = `token_attempt_${attempt}_failed`;
         if (attempt < 3) {
           await sleep(1200 * attempt);
         }
@@ -110,10 +141,14 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
     }
 
     console.error('[Notifications] Failed to get Expo push token after 3 attempts:', lastError);
+    lastPushError = String(lastError);
+    lastPushDebugState = `token_generation_failed:${String(lastError)}`;
     return null;
   } catch (error) {
     console.error('[Notifications] Error getting push token:', error);
     console.error('[Notifications] Common causes: denied notification permission, missing Android FCM credentials, or wrong EAS projectId');
+    lastPushError = String(error);
+    lastPushDebugState = `unexpected_error:${String(error)}`;
     return null;
   }
 }

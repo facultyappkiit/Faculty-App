@@ -266,6 +266,15 @@ async def get_push_token_status(user_id: int):
         )
 
 
+@router.post("/{user_id}/push-token/debug")
+async def log_push_token_debug(user_id: int, payload: dict):
+    """
+    Receive client-side push registration debug state and print it in server logs.
+    """
+    print(f"[PUSH-DEBUG] user_id={user_id} payload={payload}")
+    return {"message": "Debug state logged"}
+
+
 @router.delete("/{user_id}")
 async def delete_user(user_id: int):
     """

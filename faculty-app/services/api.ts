@@ -250,6 +250,14 @@ export const getPushTokenStatus = async (userId: number) => {
   return response.json();
 };
 
+export const sendPushTokenDebug = async (userId: number, payload: Record<string, unknown>) => {
+  await fetch(`${API_BASE_URL}/users/${userId}/push-token/debug`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+};
+
 // Update user profile
 export const updateUser = async (userId: number, data: {
   name?: string;
