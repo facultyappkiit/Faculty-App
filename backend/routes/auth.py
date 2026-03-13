@@ -363,7 +363,7 @@ async def forgot_password(email: str):
     try:
         # Use a web redirect that will then redirect to the app
         # This is more reliable than direct app scheme redirects
-        redirect_url = os.getenv("RENDER_EXTERNAL_URL", "https://facultyapp-api.onrender.com")
+        redirect_url = os.getenv("RENDER_EXTERNAL_URL", "https://faculty-app-j8ct.onrender.com")
         supabase.auth.reset_password_email(
             email,
             options={

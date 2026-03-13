@@ -3,8 +3,11 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 
-// Get project ID from app.json config
-const PROJECT_ID = Constants.expoConfig?.extra?.eas?.projectId ?? 'ed1e64f3-437b-4909-b789-f85fdc03f788';
+// Expo recommends checking both expoConfig and easConfig for EAS builds.
+const PROJECT_ID =
+  Constants.expoConfig?.extra?.eas?.projectId ??
+  Constants.easConfig?.projectId ??
+  'ed1e64f3-437b-4909-b789-f85fdc03f788';
 
 function isExpoGo(): boolean {
   return Constants.executionEnvironment === 'storeClient';
@@ -50,6 +53,13 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   try {
+    if (!PROJECT_ID) {
+      console.error('[Notifications] Missing EAS projectId; cannot request Expo push token');
+      return null;
+    }
+
+    console.log('[Notifications] Using projectId:', PROJECT_ID);
+
     // Set up Android notification channel first
     if (Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync('substitute-requests', {

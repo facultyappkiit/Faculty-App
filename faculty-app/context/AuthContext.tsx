@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { updatePushToken } from '../services/api';
+import { getPushTokenStatus, updatePushToken } from '../services/api';
 import { initializeNotifications, registerForPushNotificationsAsync } from '../services/notifications';
 
 interface User {
@@ -66,8 +66,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (pushToken) {
         // Save token to backend
         await updatePushToken(userId, pushToken);
+
+        // Verify persistence in backend to catch silent failures early.
+        const status = await getPushTokenStatus(userId);
+        console.log('[Push] Token status after save:', status);
+
         // Also save locally
         await AsyncStorage.setItem('pushToken', pushToken);
+      } else {
+        console.warn('[Push] No token generated. Check notification permission and build type.');
       }
     } catch (error) {
       console.error('Push token registration error:', error);

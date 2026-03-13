@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 // Production API URL (deployed on Render)
-const API_BASE_URL = 'https://facultyapp-api.onrender.com/api';
+const API_BASE_URL = 'https://faculty-app-j8ct.onrender.com/api';
 
 // For local development, uncomment below and comment above:
 // const LOCAL_IP = '10.5.85.207';
@@ -231,6 +231,23 @@ export const updatePushToken = async (userId: number, pushToken: string) => {
   const postResult = await postResponse.json();
   console.log('[Push] Push token updated via POST fallback:', postResult);
   return postResult;
+};
+
+export const getPushTokenStatus = async (userId: number) => {
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/push-token/status`);
+
+  if (!response.ok) {
+    let detail = 'Failed to fetch push token status';
+    try {
+      const error = await response.json();
+      detail = error?.detail || detail;
+    } catch {
+      // ignore parse errors
+    }
+    throw new Error(detail);
+  }
+
+  return response.json();
 };
 
 // Update user profile

@@ -120,7 +120,7 @@ const ResetPasswordScreen = () => {
         queryParams.append('refresh_token', refreshToken);
       }
       
-      const response = await fetch(`https://facultyapp-api.onrender.com/api/auth/update-password?${queryParams.toString()}`, {
+      const response = await fetch(`https://faculty-app-j8ct.onrender.com/api/auth/update-password?${queryParams.toString()}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json'
