@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "576186487195",
+    "project_id": "facultyapp-edde9",
+    "storage_bucket": "facultyapp-edde9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:576186487195:android:a8ea3a05dac654f761513e",
+        "android_client_info": {
+          "package_name": "com.kiit.facultyapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpqwj423VYQusWjPuo3xzb5hx_vA7EYGo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
