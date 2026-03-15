@@ -2,11 +2,9 @@ from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
 import os
-from typing import Optional
 from database import get_supabase
 
-# JWT settings
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "your-super-secret-jwt-key")
+# JWT settings for admin tokens only
 ADMIN_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "your-super-secret-jwt-key")
 
 security = HTTPBearer()
@@ -20,11 +18,10 @@ class TokenData:
         self.token_type = token_type  # "user" or "admin"
 
 
-def decode_token(token: str) -> dict:
-    """Decode and verify JWT token."""
+def decode_admin_token(token: str) -> dict:
+    """Decode and verify admin JWT token."""
     try:
-        # Try decoding with Supabase secret first
-        payload = jwt.decode(token, SUPABASE_JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
+        payload = jwt.decode(token, ADMIN_JWT_SECRET, algorithms=["HS256"], options={"verify_aud": False})
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(
@@ -32,10 +29,27 @@ def decode_token(token: str) -> dict:
             detail="Token has expired"
         )
     except jwt.InvalidTokenError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        return None  # Not an admin token, might be Supabase token
+
+
+async def verify_supabase_token(token: str) -> dict:
+    """Verify Supabase token using Supabase auth."""
+    supabase = get_supabase()
+    
+    try:
+        # Use Supabase to verify the token and get user
+        user_response = supabase.auth.get_user(token)
+        
+        if user_response and user_response.user:
+            return {
+                "email": user_response.user.email,
+                "sub": user_response.user.id,
+                "type": "supabase"
+            }
+        return None
+    except Exception as e:
+        print(f"[AUTH] Supabase token verification failed: {e}")
+        return None
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> TokenData:
@@ -44,41 +58,49 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     Works for both Supabase user tokens and admin tokens.
     """
     token = credentials.credentials
-    payload = decode_token(token)
     
-    # Check if it's an admin token
-    if payload.get("type") == "admin":
+    # First, try to decode as admin token
+    admin_payload = decode_admin_token(token)
+    if admin_payload and admin_payload.get("type") == "admin":
         return TokenData(
-            user_id=payload.get("id"),
+            user_id=admin_payload.get("id"),
             email=None,
-            role=payload.get("role", "manager"),
+            role=admin_payload.get("role", "manager"),
             token_type="admin"
         )
     
-    # It's a Supabase user token
-    email = payload.get("email")
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token: no email found"
+    # Try to verify as Supabase token
+    supabase_payload = await verify_supabase_token(token)
+    if supabase_payload:
+        email = supabase_payload.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token: no email found"
+            )
+        
+        # Get user from database
+        supabase = get_supabase()
+        result = supabase.table("users").select("id, email").eq("email", email).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        user = result.data[0]
+        return TokenData(
+            user_id=user["id"],
+            email=user["email"],
+            role="user",
+            token_type="user"
         )
     
-    # Get user from database
-    supabase = get_supabase()
-    result = supabase.table("users").select("id, email").eq("email", email).execute()
-    
-    if not result.data:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
-    user = result.data[0]
-    return TokenData(
-        user_id=user["id"],
-        email=user["email"],
-        role="user",
-        token_type="user"
+    # Token is invalid
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token"
     )
 
 
@@ -87,9 +109,9 @@ async def get_current_admin(credentials: HTTPAuthorizationCredentials = Depends(
     Verify JWT token and ensure it's an admin token.
     """
     token = credentials.credentials
-    payload = decode_token(token)
+    payload = decode_admin_token(token)
     
-    if payload.get("type") != "admin":
+    if not payload or payload.get("type") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
@@ -108,9 +130,9 @@ async def get_super_admin(credentials: HTTPAuthorizationCredentials = Depends(se
     Verify JWT token and ensure it's a super_admin token.
     """
     token = credentials.credentials
-    payload = decode_token(token)
+    payload = decode_admin_token(token)
     
-    if payload.get("type") != "admin":
+    if not payload or payload.get("type") != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required"
