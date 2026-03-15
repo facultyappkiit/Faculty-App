@@ -65,6 +65,58 @@ def create_admin_token(admin_id: str, role: str, admin_db_id: int) -> str:
     return jwt.encode(payload, ADMIN_JWT_SECRET, algorithm="HS256")
 
 
+@router.post("/init")
+async def initialize_admin(secret: str, admin_id: str = "superadmin", password: str = "admin123", name: str = "Super Admin"):
+    """
+    Initialize the first super admin. Requires ADMIN_INIT_SECRET.
+    """
+    # Require secret key for security
+    INIT_SECRET = os.getenv("ADMIN_INIT_SECRET", "kiit-faculty-admin-2024")
+    
+    if secret != INIT_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid secret key"
+        )
+    
+    supabase = get_supabase()
+    
+    try:
+        # Check if admin_id already exists
+        existing = supabase.table("admins").select("id").eq("admin_id", admin_id).execute()
+        
+        if existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Admin '{admin_id}' already exists"
+            )
+        
+        # Create super admin
+        hashed_password = hash_password(password)
+        
+        result = supabase.table("admins").insert({
+            "admin_id": admin_id,
+            "password": hashed_password,
+            "name": name,
+            "role": "super_admin",
+            "is_active": True
+        }).execute()
+        
+        return {
+            "message": "Super admin created successfully",
+            "admin_id": admin_id,
+            "note": "Store your credentials securely!"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize admin: {str(e)}"
+        )
+
+
 @router.post("/login", response_model=AdminLoginResponse)
 async def admin_login(credentials: AdminLogin):
     """

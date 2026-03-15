@@ -1,10 +1,20 @@
 from fastapi import APIRouter, HTTPException, status
-from typing import List
+from pydantic import BaseModel
+from typing import List, Optional
+import bcrypt
 
 from database import get_supabase
 from models import UserResponse, UserUpdate, PushTokenUpdate
 
 router = APIRouter()
+
+
+class AdminCreateUser(BaseModel):
+    name: str
+    email: str
+    password: str
+    department: Optional[str] = None
+    phone: Optional[str] = None
 
 
 def _is_valid_expo_push_token(token: str) -> bool:
@@ -42,6 +52,67 @@ async def get_all_users():
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch users: {str(e)}"
+        )
+
+
+@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def create_user_by_admin(user_data: AdminCreateUser):
+    """
+    Create a new user (admin only).
+    """
+    supabase = get_supabase()
+    
+    # Validate email format
+    if not user_data.email.endswith("@kiit.ac.in"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email must be a KIIT email (@kiit.ac.in)"
+        )
+    
+    try:
+        # Check if email already exists
+        existing = supabase.table("users").select("id").eq("email", user_data.email).execute()
+        if existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User with this email already exists"
+            )
+        
+        # Hash the password
+        hashed_password = bcrypt.hashpw(user_data.password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        # Create user
+        result = supabase.table("users").insert({
+            "name": user_data.name,
+            "email": user_data.email,
+            "password": hashed_password,
+            "department": user_data.department,
+            "phone": user_data.phone,
+            "email_verified": True  # Admin-created users are pre-verified
+        }).execute()
+        
+        if not result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user"
+            )
+        
+        new_user = result.data[0]
+        return UserResponse(
+            id=new_user["id"],
+            name=new_user["name"],
+            email=new_user["email"],
+            department=new_user.get("department"),
+            phone=new_user.get("phone"),
+            created_at=new_user.get("created_at")
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
         )
 
 

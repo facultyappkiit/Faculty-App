@@ -98,6 +98,7 @@ export interface SubstituteRequest {
   room: string
   notes: string
   status: 'pending' | 'accepted' | 'cancelled'
+  request_type: 'class' | 'exam'
   accepted_by: number | null
   acceptor_name: string | null
   created_at: string
@@ -110,26 +111,32 @@ export interface DashboardStats {
   acceptedRequests: number
 }
 
-// Admin login
-export const adminLogin = async (email: string, password: string) => {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  })
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(error.detail || 'Login failed')
-  }
-
-  return response.json()
-}
-
 // Get all users
 export const getUsers = async (): Promise<User[]> => {
   const response = await fetch(`${API_BASE_URL}/users`)
   if (!response.ok) throw new Error('Failed to fetch users')
+  return response.json()
+}
+
+// Create user (admin only)
+export const createUser = async (data: { 
+  name: string
+  email: string
+  password: string
+  department?: string
+  phone?: string 
+}): Promise<User> => {
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(error.detail || 'Failed to create user')
+  }
+  
   return response.json()
 }
 

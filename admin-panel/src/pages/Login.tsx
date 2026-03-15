@@ -86,12 +86,6 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
 
-          {/* Default credentials hint */}
-          <div className="mt-6 p-3 bg-gray-50 rounded-lg">
-            <p className="text-xs text-gray-500 text-center">
-              Default Super Admin: <span className="font-mono">superadmin</span> / <span className="font-mono">admin123</span>
-            </p>
-          </div>
         </div>
 
         <p className="text-center text-gray-500 text-sm mt-6">

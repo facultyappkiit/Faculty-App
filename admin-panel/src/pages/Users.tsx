@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search, Trash2, Edit2, X, Check, UserPlus } from 'lucide-react'
-import { getUsers, updateUser, deleteUser, type User, type Admin } from '../services/api'
+import { getUsers, updateUser, deleteUser, createUser, type User, type Admin } from '../services/api'
 
 interface UsersProps {
   admin: Admin
@@ -13,6 +13,16 @@ export default function Users({ admin }: UsersProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    password: '',
+    department: '',
+    phone: ''
+  })
+  const [createError, setCreateError] = useState('')
+  const [creating, setCreating] = useState(false)
 
   useEffect(() => {
     fetchUsers()
@@ -43,6 +53,45 @@ export default function Users({ admin }: UsersProps) {
     } catch (error) {
       console.error('Error updating user:', error)
       alert('Failed to update user')
+    }
+  }
+
+  const handleCreateUser = async () => {
+    setCreateError('')
+    
+    if (!newUser.name || !newUser.email || !newUser.password) {
+      setCreateError('Name, email and password are required')
+      return
+    }
+
+    if (!newUser.email.includes('@')) {
+      setNewUser({ ...newUser, email: newUser.email + '@kiit.ac.in' })
+    }
+
+    const emailToUse = newUser.email.includes('@') ? newUser.email : newUser.email + '@kiit.ac.in'
+
+    if (newUser.password.length < 6) {
+      setCreateError('Password must be at least 6 characters')
+      return
+    }
+
+    setCreating(true)
+    try {
+      const created = await createUser({
+        name: newUser.name,
+        email: emailToUse,
+        password: newUser.password,
+        department: newUser.department || undefined,
+        phone: newUser.phone || undefined
+      })
+      setUsers([...users, created])
+      setShowCreateModal(false)
+      setNewUser({ name: '', email: '', password: '', department: '', phone: '' })
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create user'
+      setCreateError(errorMessage)
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -79,7 +128,10 @@ export default function Users({ admin }: UsersProps) {
           <h1 className="text-2xl font-bold text-gray-900">Users</h1>
           <p className="text-gray-500">{users.length} registered users</p>
         </div>
-        <button className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition">
+        <button 
+          onClick={() => setShowCreateModal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
+        >
           <UserPlus size={20} />
           Add User
         </button>
@@ -230,6 +282,98 @@ export default function Users({ admin }: UsersProps) {
                 className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition"
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Add New User</h2>
+            
+            {createError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                {createError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                <input
+                  type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Full name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <div className="flex">
+                  <input
+                    type="text"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    placeholder="username"
+                  />
+                  <span className="px-3 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-500 text-sm">
+                    @kiit.ac.in
+                  </span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Min 6 characters"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  value={newUser.department}
+                  onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="e.g., CSE, ECE"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                <input
+                  type="text"
+                  value={newUser.phone}
+                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Phone number"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false)
+                  setCreateError('')
+                  setNewUser({ name: '', email: '', password: '', department: '', phone: '' })
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={creating}
+                className="flex-1 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition disabled:opacity-50"
+              >
+                {creating ? 'Creating...' : 'Create User'}
               </button>
             </div>
           </div>

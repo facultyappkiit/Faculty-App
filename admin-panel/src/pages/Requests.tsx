@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Trash2, X, Check, Filter, Calendar, Clock, MapPin } from 'lucide-react'
+import { Search, Trash2, X, Check, Filter, Calendar, Clock, MapPin, BookOpen, FileText } from 'lucide-react'
 import { getRequests, deleteRequest, type SubstituteRequest, type Admin } from '../services/api'
 
 interface RequestsProps {
@@ -12,6 +12,7 @@ export default function Requests({ admin }: RequestsProps) {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [typeFilter, setTypeFilter] = useState<string>('all')
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
   const [selectedRequest, setSelectedRequest] = useState<SubstituteRequest | null>(null)
 
@@ -41,12 +42,17 @@ export default function Requests({ admin }: RequestsProps) {
     }
   }
 
+  // Count by type
+  const classCount = requests.filter(r => r.request_type === 'class').length
+  const examCount = requests.filter(r => r.request_type === 'exam').length
+
   const filteredRequests = requests.filter(request => {
     const matchesSearch = 
       request.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.teacher_name.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || request.status === statusFilter
-    return matchesSearch && matchesStatus
+    const matchesType = typeFilter === 'all' || request.request_type === typeFilter
+    return matchesSearch && matchesStatus && matchesType
   })
 
   const getStatusColor = (status: string) => {
@@ -72,6 +78,44 @@ export default function Requests({ admin }: RequestsProps) {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Requests</h1>
         <p className="text-gray-500">{requests.length} substitute requests</p>
+      </div>
+
+      {/* Type Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div 
+          onClick={() => { setTypeFilter('all'); setStatusFilter('all'); }}
+          className={`p-4 rounded-xl cursor-pointer transition ${typeFilter === 'all' && statusFilter === 'all' ? 'bg-primary-100 border-2 border-primary-500' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}
+        >
+          <p className="text-2xl font-bold text-gray-900">{requests.length}</p>
+          <p className="text-sm text-gray-500">All Requests</p>
+        </div>
+        <div 
+          onClick={() => setTypeFilter('class')}
+          className={`p-4 rounded-xl cursor-pointer transition ${typeFilter === 'class' ? 'bg-blue-100 border-2 border-blue-500' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <BookOpen size={18} className="text-blue-600" />
+            <p className="text-2xl font-bold text-gray-900">{classCount}</p>
+          </div>
+          <p className="text-sm text-gray-500">Class</p>
+        </div>
+        <div 
+          onClick={() => setTypeFilter('exam')}
+          className={`p-4 rounded-xl cursor-pointer transition ${typeFilter === 'exam' ? 'bg-purple-100 border-2 border-purple-500' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <FileText size={18} className="text-purple-600" />
+            <p className="text-2xl font-bold text-gray-900">{examCount}</p>
+          </div>
+          <p className="text-sm text-gray-500">Exam</p>
+        </div>
+        <div 
+          onClick={() => { setStatusFilter('pending'); setTypeFilter('all'); }}
+          className={`p-4 rounded-xl cursor-pointer transition ${statusFilter === 'pending' ? 'bg-yellow-100 border-2 border-yellow-500' : 'bg-white border border-gray-200 hover:bg-gray-50'}`}
+        >
+          <p className="text-2xl font-bold text-yellow-600">{requests.filter(r => r.status === 'pending').length}</p>
+          <p className="text-sm text-gray-500">Pending</p>
+        </div>
       </div>
 
       {/* Filters */}
@@ -111,7 +155,16 @@ export default function Requests({ admin }: RequestsProps) {
           >
             <div className="flex items-start justify-between mb-3">
               <div>
-                <h3 className="font-semibold text-gray-900">{request.subject}</h3>
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-gray-900">{request.subject}</h3>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                    request.request_type === 'exam' 
+                      ? 'bg-purple-100 text-purple-700' 
+                      : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {request.request_type === 'exam' ? 'Exam' : 'Class'}
+                  </span>
+                </div>
                 <p className="text-sm text-gray-500">{request.teacher_name}</p>
               </div>
               <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(request.status)}`}>
@@ -198,6 +251,16 @@ export default function Requests({ admin }: RequestsProps) {
             </div>
 
             <div className="space-y-4">
+              <div className="flex items-center justify-between py-2 border-b">
+                <span className="text-gray-500">Type</span>
+                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  selectedRequest.request_type === 'exam' 
+                    ? 'bg-purple-100 text-purple-700' 
+                    : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {selectedRequest.request_type === 'exam' ? 'Exam Duty' : 'Class'}
+                </span>
+              </div>
               <div className="flex items-center justify-between py-2 border-b">
                 <span className="text-gray-500">Status</span>
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(selectedRequest.status)}`}>
