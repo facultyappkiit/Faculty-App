@@ -3,6 +3,11 @@ import { Stack, router } from "expo-router";
 import { Platform } from "react-native";
 import { AuthProvider } from "../context/AuthContext";
 import * as Linking from 'expo-linking';
+import {
+  addNotificationReceivedListener,
+  addNotificationResponseListener,
+  initializeNotifications,
+} from "../services/notifications";
 
 const RootLayout = () => {
   const notificationListener = useRef<{ remove: () => void } | null>(null);
@@ -84,38 +89,32 @@ const RootLayout = () => {
     // Skip notification setup on web
     if (Platform.OS === 'web') return;
 
-    // Initialize notifications after app is mounted (async)
-    const setupNotifications = async () => {
-      try {
-        const notifications = await import("../services/notifications");
-        await notifications.initializeNotifications();
-        
-        // Handle notification received while app is foregrounded
-        notificationListener.current = notifications.addNotificationReceivedListener((notification: unknown) => {
-          console.log('Notification received:', notification);
-        });
+    try {
+      initializeNotifications();
 
-        // Handle user tapping on a notification
-        responseListener.current = notifications.addNotificationResponseListener((response: unknown) => {
-          console.log('Notification tapped:', response);
-          const data = (response as any)?.notification?.request?.content?.data;
-          
-          // Navigate based on notification type using Linking
-          if (data?.type === 'new_request') {
-            // Navigate directly using Expo Router to avoid deep-link issues in Expo Go
-            router.push('/view-requests');
-          } else if (data?.type === 'request_accepted' || data?.type === 'request_cancelled') {
-            router.push('/my-requests');
-          } else if (data?.type === 'request_updated') {
-            router.push(data?.target === 'accepted' ? '/accepted-requests' : '/view-requests');
-          }
-        });
-      } catch (error) {
-        console.log('Notification setup error:', error);
-      }
-    };
-    
-    setupNotifications();
+      // Handle notification received while app is foregrounded
+      notificationListener.current = addNotificationReceivedListener((notification: unknown) => {
+        console.log('Notification received:', notification);
+      });
+
+      // Handle user tapping on a notification
+      responseListener.current = addNotificationResponseListener((response: unknown) => {
+        console.log('Notification tapped:', response);
+        const data = (response as any)?.notification?.request?.content?.data;
+
+        // Navigate based on notification type using Linking
+        if (data?.type === 'new_request') {
+          // Navigate directly using Expo Router to avoid deep-link issues in Expo Go
+          router.push('/view-requests');
+        } else if (data?.type === 'request_accepted' || data?.type === 'request_cancelled') {
+          router.push('/my-requests');
+        } else if (data?.type === 'request_updated') {
+          router.push(data?.target === 'accepted' ? '/accepted-requests' : '/view-requests');
+        }
+      });
+    } catch (error) {
+      console.log('Notification setup error:', error);
+    }
 
     return () => {
       if (notificationListener.current) {
