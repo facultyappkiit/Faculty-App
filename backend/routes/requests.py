@@ -135,6 +135,47 @@ async def get_pending_requests():
         )
 
 
+@router.get("/all", response_model=List[SubstituteRequestResponse])
+async def get_all_requests():
+    """
+    Get all substitute requests (pending, accepted, cancelled).
+    For admin panel use.
+    """
+    supabase = get_supabase()
+    
+    try:
+        # Get all requests with teacher and acceptor names
+        result = supabase.table("substitute_requests")\
+            .select("*, users!substitute_requests_teacher_id_fkey(name), acceptor:users!substitute_requests_accepted_by_fkey(name)")\
+            .order("created_at", desc=True)\
+            .execute()
+        
+        requests_list = []
+        for req in result.data:
+            teacher_name = None
+            acceptor_name = None
+            
+            if req.get("users"):
+                teacher_name = req["users"].get("name")
+            if req.get("acceptor"):
+                acceptor_name = req["acceptor"].get("name")
+            
+            response = _build_response(
+                req, 
+                teacher={"name": teacher_name} if teacher_name else None,
+                acceptor={"name": acceptor_name} if acceptor_name else None
+            )
+            requests_list.append(response)
+        
+        return requests_list
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch all requests: {str(e)}"
+        )
+
+
 @router.get("/teacher/{teacher_id}", response_model=List[SubstituteRequestResponse])
 async def get_teacher_requests(teacher_id: int):
     """

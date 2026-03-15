@@ -7,3 +7,5 @@ pydantic[email]
 python-multipart
 exponent-server-sdk
 httpx
+PyJWT
+bcrypt
