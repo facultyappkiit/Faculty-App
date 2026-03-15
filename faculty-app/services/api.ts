@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Production API URL (deployed on Render)
 const API_BASE_URL = 'https://faculty-app-j8ct.onrender.com/api';
@@ -10,6 +11,15 @@ const API_BASE_URL = 'https://faculty-app-j8ct.onrender.com/api';
 //   : `http://${LOCAL_IP}:8000/api`;
 
 console.log('API URL:', API_BASE_URL); // Debug log
+
+// Helper to get auth headers with JWT token
+const getAuthHeaders = async (): Promise<HeadersInit> => {
+  const token = await AsyncStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+};
 
 export type SubstituteRequestType = 'class' | 'exam';
 
@@ -67,7 +77,7 @@ export const checkHealth = async () => {
   return response.json();
 };
 
-// Auth APIs
+// Auth APIs (no auth required)
 export const signup = async (data: {
   username: string;
   password: string;
@@ -126,11 +136,15 @@ export const resetPassword = async (email: string) => {
   return response.json();
 };
 
-// Requests APIs
+// Requests APIs (auth required)
 export const getPendingRequests = async () => {
-  const response = await fetch(`${API_BASE_URL}/requests`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/requests`, {
+    headers
+  });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
     throw new Error('Failed to fetch requests');
   }
   
@@ -138,9 +152,14 @@ export const getPendingRequests = async () => {
 };
 
 export const getTeacherRequests = async (teacherId: number) => {
-  const response = await fetch(`${API_BASE_URL}/requests/teacher/${teacherId}`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/requests/teacher/${teacherId}`, {
+    headers
+  });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('Not authorized to view these requests');
     throw new Error('Failed to fetch teacher requests');
   }
   
@@ -148,9 +167,14 @@ export const getTeacherRequests = async (teacherId: number) => {
 };
 
 export const getAcceptedRequests = async (teacherId: number) => {
-  const response = await fetch(`${API_BASE_URL}/requests/accepted-by/${teacherId}`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/requests/accepted-by/${teacherId}`, {
+    headers
+  });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('Not authorized to view these requests');
     throw new Error('Failed to fetch accepted requests');
   }
   
@@ -158,9 +182,13 @@ export const getAcceptedRequests = async (teacherId: number) => {
 };
 
 export const getRequest = async (requestId: number) => {
-  const response = await fetch(`${API_BASE_URL}/requests/${requestId}`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/requests/${requestId}`, {
+    headers
+  });
 
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
     throw new Error(await readErrorMessage(response, 'Failed to fetch request'));
   }
 
@@ -178,13 +206,16 @@ export const createRequest = async (data: {
   campus?: string;
   notes?: string;
 }) => {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/requests`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(data),
   });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('You can only create requests for yourself');
     throw new Error(await readErrorMessage(response, 'Failed to create request'));
   }
   
@@ -196,13 +227,16 @@ export const updateRequest = async (
   teacherId: number,
   data: Partial<SubstituteRequestPayload>
 ) => {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/requests/${requestId}?teacher_id=${teacherId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(data),
   });
 
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('You can only update your own requests');
     throw new Error(await readErrorMessage(response, 'Failed to update request'));
   }
 
@@ -210,13 +244,16 @@ export const updateRequest = async (
 };
 
 export const acceptRequest = async (requestId: number, teacherId: number) => {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/requests/${requestId}/accept`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ teacher_id: teacherId }),
   });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('You can only accept requests as yourself');
     throw new Error(await readErrorMessage(response, 'Failed to accept request'));
   }
   
@@ -224,24 +261,31 @@ export const acceptRequest = async (requestId: number, teacherId: number) => {
 };
 
 export const cancelRequest = async (requestId: number, teacherId: number) => {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/requests/${requestId}/cancel`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ teacher_id: teacherId }),
   });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('You can only cancel your own requests');
     throw new Error(await readErrorMessage(response, 'Failed to cancel request'));
   }
   
   return response.json();
 };
 
-// Users APIs
+// Users APIs (auth required)
 export const getUsers = async () => {
-  const response = await fetch(`${API_BASE_URL}/users`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    headers
+  });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
     throw new Error('Failed to fetch users');
   }
   
@@ -249,9 +293,14 @@ export const getUsers = async () => {
 };
 
 export const getUser = async (userId: number) => {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
+    headers
+  });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('Not authorized to view this profile');
     throw new Error('Failed to fetch user');
   }
   
@@ -261,10 +310,12 @@ export const getUser = async (userId: number) => {
 // Update user's push notification token
 export const updatePushToken = async (userId: number, pushToken: string) => {
   console.log(`[Push] Updating push token for user ${userId}: ${pushToken}`);
+  
+  const headers = await getAuthHeaders();
 
   const putResponse = await fetch(`${API_BASE_URL}/users/${userId}/push-token`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ push_token: pushToken }),
   });
 
@@ -286,7 +337,7 @@ export const updatePushToken = async (userId: number, pushToken: string) => {
 
   const postResponse = await fetch(
     `${API_BASE_URL}/users/${userId}/push-token?push_token=${encodeURIComponent(pushToken)}`,
-    { method: 'POST' }
+    { method: 'POST', headers }
   );
 
   if (!postResponse.ok) {
@@ -306,7 +357,10 @@ export const updatePushToken = async (userId: number, pushToken: string) => {
 };
 
 export const getPushTokenStatus = async (userId: number) => {
-  const response = await fetch(`${API_BASE_URL}/users/${userId}/push-token/status`);
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/push-token/status`, {
+    headers
+  });
 
   if (!response.ok) {
     let detail = 'Failed to fetch push token status';
@@ -323,9 +377,10 @@ export const getPushTokenStatus = async (userId: number) => {
 };
 
 export const sendPushTokenDebug = async (userId: number, payload: Record<string, unknown>) => {
+  const headers = await getAuthHeaders();
   await fetch(`${API_BASE_URL}/users/${userId}/push-token/debug`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(payload),
   });
 };
@@ -336,13 +391,16 @@ export const updateUser = async (userId: number, data: {
   department?: string;
   phone?: string;
 }) => {
+  const headers = await getAuthHeaders();
   const response = await fetch(`${API_BASE_URL}/users/${userId}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(data),
   });
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Session expired - Please login again');
+    if (response.status === 403) throw new Error('Not authorized to update this profile');
     const error = await response.json();
     throw new Error(error.detail || 'Failed to update user');
   }

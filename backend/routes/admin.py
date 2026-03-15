@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -6,6 +6,7 @@ import bcrypt
 import jwt
 import os
 from database import get_supabase
+from middleware.auth import get_current_admin, get_super_admin, TokenData
 
 router = APIRouter()
 
@@ -63,58 +64,6 @@ def create_admin_token(admin_id: str, role: str, admin_db_id: int) -> str:
         "type": "admin"
     }
     return jwt.encode(payload, ADMIN_JWT_SECRET, algorithm="HS256")
-
-
-@router.post("/init")
-async def initialize_admin(secret: str, admin_id: str = "superadmin", password: str = "admin123", name: str = "Super Admin"):
-    """
-    Initialize the first super admin. Requires ADMIN_INIT_SECRET.
-    """
-    # Require secret key for security
-    INIT_SECRET = os.getenv("ADMIN_INIT_SECRET", "kiit-faculty-admin-2024")
-    
-    if secret != INIT_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid secret key"
-        )
-    
-    supabase = get_supabase()
-    
-    try:
-        # Check if admin_id already exists
-        existing = supabase.table("admins").select("id").eq("admin_id", admin_id).execute()
-        
-        if existing.data:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Admin '{admin_id}' already exists"
-            )
-        
-        # Create super admin
-        hashed_password = hash_password(password)
-        
-        result = supabase.table("admins").insert({
-            "admin_id": admin_id,
-            "password": hashed_password,
-            "name": name,
-            "role": "super_admin",
-            "is_active": True
-        }).execute()
-        
-        return {
-            "message": "Super admin created successfully",
-            "admin_id": admin_id,
-            "note": "Store your credentials securely!"
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to initialize admin: {str(e)}"
-        )
 
 
 @router.post("/login", response_model=AdminLoginResponse)
@@ -186,9 +135,10 @@ async def admin_login(credentials: AdminLogin):
 
 
 @router.get("/", response_model=List[AdminResponse])
-async def get_all_admins():
+async def get_all_admins(current_admin: TokenData = Depends(get_super_admin)):
     """
-    Get all admins (super_admin only).
+    Get all admins.
+    Super admin only.
     """
     supabase = get_supabase()
     
@@ -208,9 +158,10 @@ async def get_all_admins():
 
 
 @router.post("/", response_model=AdminResponse, status_code=status.HTTP_201_CREATED)
-async def create_admin(admin: AdminCreate):
+async def create_admin(admin: AdminCreate, current_admin: TokenData = Depends(get_super_admin)):
     """
-    Create a new admin (super_admin only).
+    Create a new admin.
+    Super admin only.
     """
     supabase = get_supabase()
     
@@ -266,9 +217,10 @@ async def create_admin(admin: AdminCreate):
 
 
 @router.put("/{admin_id}", response_model=AdminResponse)
-async def update_admin(admin_id: int, admin_update: AdminUpdate):
+async def update_admin(admin_id: int, admin_update: AdminUpdate, current_admin: TokenData = Depends(get_super_admin)):
     """
-    Update an admin (super_admin only).
+    Update an admin.
+    Super admin only.
     """
     supabase = get_supabase()
     
@@ -324,9 +276,10 @@ async def update_admin(admin_id: int, admin_update: AdminUpdate):
 
 
 @router.delete("/{admin_id}")
-async def delete_admin(admin_id: int):
+async def delete_admin(admin_id: int, current_admin: TokenData = Depends(get_super_admin)):
     """
-    Delete an admin (super_admin only).
+    Delete an admin.
+    Super admin only.
     """
     supabase = get_supabase()
     
@@ -354,10 +307,18 @@ async def delete_admin(admin_id: int):
 
 
 @router.put("/{admin_id}/password")
-async def change_admin_password(admin_id: int, new_password: str):
+async def change_admin_password(admin_id: int, new_password: str, current_admin: TokenData = Depends(get_current_admin)):
     """
-    Change admin password (super_admin only or self).
+    Change admin password.
+    Super admin can change any password, others can only change their own.
     """
+    # Only super_admin or self can change password
+    if current_admin.role != "super_admin" and current_admin.user_id != admin_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only change your own password"
+        )
+    
     supabase = get_supabase()
     
     if len(new_password) < 6:

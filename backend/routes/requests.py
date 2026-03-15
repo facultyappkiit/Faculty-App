@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import List
 
 from database import get_supabase
@@ -10,6 +10,7 @@ from models import (
     CancelRequest
 )
 from services.push_notifications import notify_all_faculty_except, notify_user
+from middleware.auth import get_current_user, get_current_admin, TokenData
 
 router = APIRouter()
 
@@ -102,10 +103,11 @@ def _validate_update_payload(existing_request: dict, update_payload: dict) -> di
 
 
 @router.get("/", response_model=List[SubstituteRequestResponse])
-async def get_pending_requests():
+async def get_pending_requests(current_user: TokenData = Depends(get_current_user)):
     """
     Get all pending substitute requests.
     Returns requests ordered by date and time.
+    Requires authentication.
     """
     supabase = get_supabase()
     
@@ -136,10 +138,10 @@ async def get_pending_requests():
 
 
 @router.get("/all", response_model=List[SubstituteRequestResponse])
-async def get_all_requests():
+async def get_all_requests(current_admin: TokenData = Depends(get_current_admin)):
     """
     Get all substitute requests (pending, accepted, cancelled).
-    For admin panel use.
+    For admin panel use. Requires admin authentication.
     """
     supabase = get_supabase()
     
@@ -177,10 +179,17 @@ async def get_all_requests():
 
 
 @router.get("/teacher/{teacher_id}", response_model=List[SubstituteRequestResponse])
-async def get_teacher_requests(teacher_id: int):
+async def get_teacher_requests(teacher_id: int, current_user: TokenData = Depends(get_current_user)):
     """
     Get all substitute requests created by a specific teacher.
+    Users can only access their own requests, admins can access any.
     """
+    # Users can only view their own requests, admins can view any
+    if current_user.token_type != "admin" and current_user.user_id != teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this teacher's requests"
+        )
     supabase = get_supabase()
     
     try:
@@ -223,10 +232,17 @@ async def get_teacher_requests(teacher_id: int):
 
 
 @router.get("/accepted-by/{teacher_id}", response_model=List[SubstituteRequestResponse])
-async def get_accepted_requests(teacher_id: int):
+async def get_accepted_requests(teacher_id: int, current_user: TokenData = Depends(get_current_user)):
     """
     Get all substitute requests accepted by a specific teacher.
+    Users can only access their own accepted requests, admins can access any.
     """
+    # Users can only view their own accepted requests, admins can view any
+    if current_user.token_type != "admin" and current_user.user_id != teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this teacher's accepted requests"
+        )
     supabase = get_supabase()
     
     try:
@@ -270,9 +286,10 @@ async def get_accepted_requests(teacher_id: int):
 
 
 @router.get("/{request_id}", response_model=SubstituteRequestResponse)
-async def get_request(request_id: int):
+async def get_request(request_id: int, current_user: TokenData = Depends(get_current_user)):
     """
     Get a specific substitute request by ID.
+    Requires authentication.
     """
     supabase = get_supabase()
     
@@ -307,10 +324,18 @@ async def get_request(request_id: int):
 
 
 @router.post("/", response_model=SubstituteRequestResponse, status_code=status.HTTP_201_CREATED)
-async def create_request(request: SubstituteRequestCreate):
+async def create_request(request: SubstituteRequestCreate, current_user: TokenData = Depends(get_current_user)):
     """
     Create a new substitute request.
+    Users can only create requests for themselves.
     """
+    # Users can only create requests for themselves
+    if current_user.token_type != "admin" and current_user.user_id != request.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only create requests for yourself"
+        )
+    
     supabase = get_supabase()
     
     try:
@@ -367,10 +392,18 @@ async def create_request(request: SubstituteRequestCreate):
 
 
 @router.put("/{request_id}/accept", response_model=SubstituteRequestResponse)
-async def accept_request(request_id: int, accept_data: AcceptRequest):
+async def accept_request(request_id: int, accept_data: AcceptRequest, current_user: TokenData = Depends(get_current_user)):
     """
     Accept a pending substitute request.
+    Users can only accept requests as themselves.
     """
+    # Users can only accept requests as themselves
+    if current_user.token_type != "admin" and current_user.user_id != accept_data.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only accept requests as yourself"
+        )
+    
     supabase = get_supabase()
     
     try:
@@ -452,10 +485,18 @@ async def update_request(
     request_id: int,
     request_update: SubstituteRequestUpdate,
     teacher_id: int = Query(...),
+    current_user: TokenData = Depends(get_current_user),
 ):
     """
     Update a substitute request (only by the teacher who created it).
     """
+    # Users can only update their own requests
+    if current_user.token_type != "admin" and current_user.user_id != teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own requests"
+        )
+    
     supabase = get_supabase()
 
     try:
@@ -544,10 +585,17 @@ async def update_request(
 
 
 @router.put("/{request_id}/cancel", response_model=SubstituteRequestResponse)
-async def cancel_request(request_id: int, cancel_data: CancelRequest):
+async def cancel_request(request_id: int, cancel_data: CancelRequest, current_user: TokenData = Depends(get_current_user)):
     """
     Cancel a substitute request (only by the teacher who created it).
     """
+    # Users can only cancel their own requests
+    if current_user.token_type != "admin" and current_user.user_id != cancel_data.teacher_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only cancel your own requests"
+        )
+    
     supabase = get_supabase()
     
     try:
@@ -607,11 +655,28 @@ async def cancel_request(request_id: int, cancel_data: CancelRequest):
 
 
 @router.delete("/{request_id}")
-async def delete_request(request_id: int, teacher_id: int):
+async def delete_request(request_id: int, teacher_id: int = None, current_user: TokenData = Depends(get_current_user)):
     """
-    Delete a substitute request (only by the teacher who created it).
-    Pass teacher_id as query parameter: /api/requests/{request_id}?teacher_id=1
+    Delete a substitute request.
+    Admins can delete any request.
+    Users can only delete their own requests (pass teacher_id as query param).
     """
+    # Admins can delete any request
+    if current_user.token_type == "admin":
+        supabase = get_supabase()
+        check_result = supabase.table("substitute_requests").select("*").eq("id", request_id).execute()
+        if not check_result.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Request not found")
+        supabase.table("substitute_requests").delete().eq("id", request_id).execute()
+        return {"message": "Request deleted successfully"}
+    
+    # Users must provide teacher_id and it must match their user_id
+    if not teacher_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="teacher_id is required")
+    
+    if current_user.user_id != teacher_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own requests")
+    
     supabase = get_supabase()
     
     try:

@@ -1,10 +1,11 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel
 from typing import List, Optional
 import bcrypt
 
 from database import get_supabase
 from models import UserResponse, UserUpdate, PushTokenUpdate
+from middleware.auth import get_current_user, get_current_admin, get_super_admin, TokenData
 
 router = APIRouter()
 
@@ -24,9 +25,10 @@ def _is_valid_expo_push_token(token: str) -> bool:
 
 
 @router.get("/", response_model=List[UserResponse])
-async def get_all_users():
+async def get_all_users(current_admin: TokenData = Depends(get_current_admin)):
     """
     Get all registered faculty users.
+    Admin only.
     """
     supabase = get_supabase()
     
@@ -56,9 +58,10 @@ async def get_all_users():
 
 
 @router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user_by_admin(user_data: AdminCreateUser):
+async def create_user_by_admin(user_data: AdminCreateUser, current_admin: TokenData = Depends(get_current_admin)):
     """
-    Create a new user (admin only).
+    Create a new user.
+    Admin only.
     """
     supabase = get_supabase()
     
@@ -117,10 +120,17 @@ async def create_user_by_admin(user_data: AdminCreateUser):
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int):
+async def get_user(user_id: int, current_user: TokenData = Depends(get_current_user)):
     """
     Get a specific user by ID.
+    Users can only view their own profile, admins can view any.
     """
+    # Users can only view their own profile, admins can view any
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this profile"
+        )
     supabase = get_supabase()
     
     try:
@@ -155,10 +165,17 @@ async def get_user(user_id: int):
 
 
 @router.put("/{user_id}", response_model=UserResponse)
-async def update_user(user_id: int, user_update: UserUpdate):
+async def update_user(user_id: int, user_update: UserUpdate, current_user: TokenData = Depends(get_current_user)):
     """
     Update user profile information.
+    Users can only update their own profile, admins can update any.
     """
+    # Users can only update their own profile, admins can update any
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this profile"
+        )
     supabase = get_supabase()
     
     try:
@@ -208,11 +225,18 @@ async def update_user(user_id: int, user_update: UserUpdate):
 
 
 @router.put("/{user_id}/push-token")
-async def update_push_token(user_id: int, token_update: PushTokenUpdate):
+async def update_push_token(user_id: int, token_update: PushTokenUpdate, current_user: TokenData = Depends(get_current_user)):
     """
     Update the push notification token for a user.
     Send JSON body: {"push_token": "ExponentPushToken[xxx]"}
+    Users can only update their own push token.
     """
+    # Users can only update their own push token
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this push token"
+        )
     supabase = get_supabase()
     
     token = token_update.push_token
@@ -255,11 +279,18 @@ async def update_push_token(user_id: int, token_update: PushTokenUpdate):
 
 
 @router.post("/{user_id}/push-token")
-async def set_push_token_simple(user_id: int, push_token: str):
+async def set_push_token_simple(user_id: int, push_token: str, current_user: TokenData = Depends(get_current_user)):
     """
     Simple endpoint to set push token via query parameter.
     Example: POST /api/users/1/push-token?push_token=ExponentPushToken[xxx]
+    Users can only update their own push token.
     """
+    # Users can only update their own push token
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to update this push token"
+        )
     supabase = get_supabase()
     
     print(f"[PUSH-TOKEN] POST received for user {user_id}: {push_token}")
@@ -300,11 +331,18 @@ async def set_push_token_simple(user_id: int, push_token: str):
 
 
 @router.get("/{user_id}/push-token/status")
-async def get_push_token_status(user_id: int):
+async def get_push_token_status(user_id: int, current_user: TokenData = Depends(get_current_user)):
     """
     Get push token registration status for a user.
     Useful for debugging notification registration from the app.
+    Users can only check their own status, admins can check any.
     """
+    # Users can only check their own status, admins can check any
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this status"
+        )
     supabase = get_supabase()
 
     try:
@@ -338,18 +376,26 @@ async def get_push_token_status(user_id: int):
 
 
 @router.post("/{user_id}/push-token/debug")
-async def log_push_token_debug(user_id: int, payload: dict):
+async def log_push_token_debug(user_id: int, payload: dict, current_user: TokenData = Depends(get_current_user)):
     """
     Receive client-side push registration debug state and print it in server logs.
+    Users can only log debug for their own account.
     """
+    # Users can only debug their own account
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized"
+        )
     print(f"[PUSH-DEBUG] user_id={user_id} payload={payload}")
     return {"message": "Debug state logged"}
 
 
 @router.delete("/{user_id}")
-async def delete_user(user_id: int):
+async def delete_user(user_id: int, current_admin: TokenData = Depends(get_super_admin)):
     """
     Delete a user account.
+    Super admin only.
     """
     supabase = get_supabase()
     

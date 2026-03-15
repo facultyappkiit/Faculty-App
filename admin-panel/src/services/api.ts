@@ -3,6 +3,15 @@ const API_BASE_URL = 'https://faculty-app-j8ct.onrender.com/api'
 // For local development:
 // const API_BASE_URL = 'http://localhost:8000/api'
 
+// Helper to get auth header
+const getAuthHeaders = (): HeadersInit => {
+  const token = localStorage.getItem('adminToken')
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  }
+}
+
 // Admin types
 export interface Admin {
   id: number
@@ -19,7 +28,7 @@ export interface AdminLoginResponse {
   admin: Admin
 }
 
-// Admin login
+// Admin login (no auth required)
 export const adminLogin = async (adminId: string, password: string): Promise<AdminLoginResponse> => {
   const response = await fetch(`${API_BASE_URL}/admin/login`, {
     method: 'POST',
@@ -37,8 +46,14 @@ export const adminLogin = async (adminId: string, password: string): Promise<Adm
 
 // Get all admins (super_admin only)
 export const getAdmins = async (): Promise<Admin[]> => {
-  const response = await fetch(`${API_BASE_URL}/admin/`)
-  if (!response.ok) throw new Error('Failed to fetch admins')
+  const response = await fetch(`${API_BASE_URL}/admin/`, {
+    headers: getAuthHeaders()
+  })
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Super admin only')
+    throw new Error('Failed to fetch admins')
+  }
   return response.json()
 }
 
@@ -46,10 +61,12 @@ export const getAdmins = async (): Promise<Admin[]> => {
 export const createAdmin = async (data: { admin_id: string; password: string; name: string; role: string }) => {
   const response = await fetch(`${API_BASE_URL}/admin/`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Super admin only')
     const error = await response.json()
     throw new Error(error.detail || 'Failed to create admin')
   }
@@ -60,10 +77,14 @@ export const createAdmin = async (data: { admin_id: string; password: string; na
 export const updateAdmin = async (id: number, data: { name?: string; role?: string; is_active?: boolean }) => {
   const response = await fetch(`${API_BASE_URL}/admin/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
-  if (!response.ok) throw new Error('Failed to update admin')
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Super admin only')
+    throw new Error('Failed to update admin')
+  }
   return response.json()
 }
 
@@ -71,8 +92,13 @@ export const updateAdmin = async (id: number, data: { name?: string; role?: stri
 export const deleteAdmin = async (id: number) => {
   const response = await fetch(`${API_BASE_URL}/admin/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   })
-  if (!response.ok) throw new Error('Failed to delete admin')
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Super admin only')
+    throw new Error('Failed to delete admin')
+  }
   return response.json()
 }
 
@@ -111,10 +137,16 @@ export interface DashboardStats {
   acceptedRequests: number
 }
 
-// Get all users
+// Get all users (admin only)
 export const getUsers = async (): Promise<User[]> => {
-  const response = await fetch(`${API_BASE_URL}/users`)
-  if (!response.ok) throw new Error('Failed to fetch users')
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    headers: getAuthHeaders()
+  })
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Admin only')
+    throw new Error('Failed to fetch users')
+  }
   return response.json()
 }
 
@@ -128,11 +160,13 @@ export const createUser = async (data: {
 }): Promise<User> => {
   const response = await fetch(`${API_BASE_URL}/users`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
   
   if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Admin only')
     const error = await response.json()
     throw new Error(error.detail || 'Failed to create user')
   }
@@ -140,53 +174,72 @@ export const createUser = async (data: {
   return response.json()
 }
 
-// Get user by ID
+// Get user by ID (admin only)
 export const getUser = async (id: number): Promise<User> => {
-  const response = await fetch(`${API_BASE_URL}/users/${id}`)
-  if (!response.ok) throw new Error('Failed to fetch user')
+  const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+    headers: getAuthHeaders()
+  })
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied')
+    throw new Error('Failed to fetch user')
+  }
   return response.json()
 }
 
-// Update user
+// Update user (admin only)
 export const updateUser = async (id: number, data: Partial<User>) => {
   const response = await fetch(`${API_BASE_URL}/users/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders(),
     body: JSON.stringify(data),
   })
-  if (!response.ok) throw new Error('Failed to update user')
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Admin only')
+    throw new Error('Failed to update user')
+  }
   return response.json()
 }
 
-// Delete user
+// Delete user (super_admin only)
 export const deleteUser = async (id: number) => {
   const response = await fetch(`${API_BASE_URL}/users/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   })
-  if (!response.ok) throw new Error('Failed to delete user')
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Super admin only')
+    throw new Error('Failed to delete user')
+  }
   return response.json()
 }
 
-// Get pending requests only
-export const getPendingRequests = async (): Promise<SubstituteRequest[]> => {
-  const response = await fetch(`${API_BASE_URL}/requests/`)
-  if (!response.ok) throw new Error('Failed to fetch requests')
-  return response.json()
-}
-
-// Get all requests (pending, accepted, cancelled) - for admin panel
+// Get all requests (admin only)
 export const getRequests = async (): Promise<SubstituteRequest[]> => {
-  const response = await fetch(`${API_BASE_URL}/requests/all`)
-  if (!response.ok) throw new Error('Failed to fetch all requests')
+  const response = await fetch(`${API_BASE_URL}/requests/all`, {
+    headers: getAuthHeaders()
+  })
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Admin only')
+    throw new Error('Failed to fetch all requests')
+  }
   return response.json()
 }
 
-// Delete request
+// Delete request (admin only)
 export const deleteRequest = async (id: number) => {
   const response = await fetch(`${API_BASE_URL}/requests/${id}`, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   })
-  if (!response.ok) throw new Error('Failed to delete request')
+  if (!response.ok) {
+    if (response.status === 401) throw new Error('Unauthorized - Please login again')
+    if (response.status === 403) throw new Error('Access denied - Admin only')
+    throw new Error('Failed to delete request')
+  }
   return response.json()
 }
 
