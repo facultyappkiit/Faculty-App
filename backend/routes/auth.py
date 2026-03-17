@@ -564,6 +564,190 @@ async def complete_registration(request: CompleteRegistrationRequest):
         )
 
 
+@router.get("/verify-invite-token")
+async def verify_invite_token(access_token: str):
+    """
+    Verify Supabase invite token and return user info.
+    Used when user clicks invite link from Supabase email.
+    """
+    supabase = get_supabase()
+    
+    try:
+        # Get user from Supabase using the access token
+        user_response = supabase.auth.get_user(access_token)
+        
+        if not user_response or not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired invite token"
+            )
+        
+        user = user_response.user
+        email = user.email
+        
+        # Check if we have pending invite for this email
+        invite_result = supabase.table("pending_invites")\
+            .select("*")\
+            .eq("email", email.lower())\
+            .eq("status", "pending")\
+            .execute()
+        
+        if invite_result.data:
+            invite = invite_result.data[0]
+            return {
+                "email": email,
+                "name": invite.get("name", email.split("@")[0]),
+                "department": invite.get("department"),
+                "phone": invite.get("phone")
+            }
+        
+        # If no pending invite, use Supabase user metadata
+        metadata = user.user_metadata or {}
+        return {
+            "email": email,
+            "name": metadata.get("name", email.split("@")[0]),
+            "department": metadata.get("department"),
+            "phone": metadata.get("phone")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to verify token: {str(e)}"
+        )
+
+
+class CompleteSupabaseRegistrationRequest(BaseModel):
+    access_token: str
+    password: str
+    name: Optional[str] = None
+    department: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@router.post("/complete-supabase-registration")
+async def complete_supabase_registration(request: CompleteSupabaseRegistrationRequest):
+    """
+    Complete registration for a user who came via Supabase invite.
+    Updates their password and creates user profile.
+    """
+    import httpx
+    
+    supabase = get_supabase()
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    
+    if len(request.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters"
+        )
+    
+    try:
+        # Verify the token and get user
+        user_response = supabase.auth.get_user(request.access_token)
+        
+        if not user_response or not user_response.user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+        
+        user = user_response.user
+        email = user.email
+        
+        # Update password using Supabase REST API
+        async with httpx.AsyncClient() as client:
+            response = await client.put(
+                f"{supabase_url}/auth/v1/user",
+                headers={
+                    "Authorization": f"Bearer {request.access_token}",
+                    "apikey": supabase_key,
+                    "Content-Type": "application/json"
+                },
+                json={"password": request.password}
+            )
+            
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Failed to set password"
+                )
+        
+        # Check if user already exists in our users table
+        existing_user = supabase.table("users").select("id").eq("email", email).execute()
+        
+        if existing_user.data:
+            # User already exists, just update pending invite status
+            supabase.table("pending_invites")\
+                .update({"status": "accepted"})\
+                .eq("email", email.lower())\
+                .execute()
+            
+            return {
+                "success": True,
+                "message": "Password set successfully. You can now login.",
+                "user": existing_user.data[0]
+            }
+        
+        # Get name from pending invite or request
+        name = request.name
+        department = request.department
+        phone = request.phone
+        
+        # Check pending invite for details
+        invite_result = supabase.table("pending_invites")\
+            .select("*")\
+            .eq("email", email.lower())\
+            .execute()
+        
+        if invite_result.data:
+            invite = invite_result.data[0]
+            name = name or invite.get("name")
+            department = department or invite.get("department")
+            phone = phone or invite.get("phone")
+            
+            # Mark invite as accepted
+            supabase.table("pending_invites")\
+                .update({"status": "accepted"})\
+                .eq("id", invite["id"])\
+                .execute()
+        
+        # Create user profile
+        user_data = {
+            "auth_id": user.id,
+            "name": name or email.split("@")[0],
+            "email": email,
+            "department": department,
+            "phone": phone,
+            "email_verified": True
+        }
+        
+        user_result = supabase.table("users").insert(user_data).execute()
+        
+        if not user_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create user profile"
+            )
+        
+        return {
+            "success": True,
+            "message": "Registration complete! You can now login with the app.",
+            "user": user_result.data[0]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
 @router.post("/forgot-password")
 async def forgot_password(email: str):
     """
