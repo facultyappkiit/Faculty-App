@@ -34,7 +34,7 @@ async def get_all_users(current_admin: TokenData = Depends(get_current_admin)):
     
     try:
         result = supabase.table("users")\
-            .select("id, name, email, department, phone, created_at")\
+            .select("id, name, email, department, phone, email_verified, push_token, created_at")\
             .order("name")\
             .execute()
         
@@ -45,6 +45,8 @@ async def get_all_users(current_admin: TokenData = Depends(get_current_admin)):
                 email=user["email"],
                 department=user.get("department"),
                 phone=user.get("phone"),
+                email_verified=user.get("email_verified", False),
+                push_token=user.get("push_token"),
                 created_at=user.get("created_at")
             )
             for user in result.data

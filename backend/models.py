@@ -42,6 +42,7 @@ class UserResponse(BaseModel):
     department: Optional[str] = None
     phone: Optional[str] = None
     email_verified: Optional[bool] = False
+    push_token: Optional[str] = None
     created_at: Optional[datetime] = None
 
     class Config:
