@@ -39,6 +39,8 @@ const REQUEST_TYPES: Array<{
   },
 ];
 
+const CAMPUS_OPTIONS = ['Campus 25A', 'Campus 25B', 'Campus 25C', 'Campus 14', 'Campus 15A', 'Campus 15B'];
+
 const RequestSubstituteScreen = () => {
   const router = useRouter();
   const { requestId } = useLocalSearchParams<{ requestId?: string }>();
@@ -49,7 +51,7 @@ const RequestSubstituteScreen = () => {
 
   const [requestType, setRequestType] = useState<SubstituteRequestType>('class');
   const [subject, setSubject] = useState('');
-  const [classroom, setClassroom] = useState('');
+  const [roomNo, setRoomNo] = useState('');
   const [campus, setCampus] = useState('');
   const [date, setDate] = useState(new Date());
   const [time, setTime] = useState(new Date());
@@ -58,6 +60,7 @@ const RequestSubstituteScreen = () => {
   const [isFetching, setIsFetching] = useState(isEditing);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [showCampusDropdown, setShowCampusDropdown] = useState(false);
 
   useEffect(() => {
     const loadRequest = async () => {
@@ -77,8 +80,14 @@ const RequestSubstituteScreen = () => {
 
         setRequestType(existingRequest.request_type || 'class');
         setSubject(existingRequest.subject || '');
-        setClassroom(existingRequest.classroom || '');
-        setCampus(existingRequest.campus || '');
+        if ((existingRequest.request_type || 'class') === 'class') {
+          const parsedClassroom = parseClassroomDetails(existingRequest.classroom || '');
+          setCampus(parsedClassroom.campus);
+          setRoomNo(parsedClassroom.roomNo);
+        } else {
+          setCampus(existingRequest.campus || '');
+          setRoomNo('');
+        }
         setDate(new Date(existingRequest.date));
         setTime(parseTimeString(existingRequest.time));
         setNotes(existingRequest.notes || '');
@@ -111,12 +120,13 @@ const RequestSubstituteScreen = () => {
 
   const handleTypeChange = (nextType: SubstituteRequestType) => {
     setRequestType(nextType);
+    setShowCampusDropdown(false);
 
     if (nextType === 'class') {
-      setCampus('');
+      setRoomNo('');
     } else {
       setSubject('');
-      setClassroom('');
+      setRoomNo('');
     }
   };
 
@@ -126,8 +136,8 @@ const RequestSubstituteScreen = () => {
       return;
     }
 
-    if (requestType === 'class' && (!subject.trim() || !classroom.trim())) {
-      Alert.alert('Error', 'Please fill in subject and room number');
+    if (requestType === 'class' && (!subject.trim() || !campus.trim() || !roomNo.trim())) {
+      Alert.alert('Error', 'Please fill in subject, campus, and room number');
       return;
     }
 
@@ -144,7 +154,7 @@ const RequestSubstituteScreen = () => {
         date: date.toISOString().split('T')[0],
         time: formatTime(time),
         duration: 60,
-        classroom: requestType === 'class' ? classroom.trim() : undefined,
+        classroom: requestType === 'class' ? `${campus.trim()} - ${roomNo.trim()}` : undefined,
         campus: requestType === 'exam' ? campus.trim() : undefined,
         notes: notes.trim() || undefined,
       };
@@ -250,15 +260,50 @@ const RequestSubstituteScreen = () => {
               </View>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Room Number</Text>
-                <View style={styles.inputContainer}>
+                <Text style={styles.label}>Campus and Room No</Text>
+
+                <TouchableOpacity
+                  style={styles.inputContainer}
+                  onPress={() => setShowCampusDropdown((prev) => !prev)}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+                  <Text style={[styles.dropdownText, !campus && styles.dropdownPlaceholder]}>
+                    {campus || 'Select campus'}
+                  </Text>
+                  <Ionicons
+                    name={showCampusDropdown ? 'chevron-up' : 'chevron-down'}
+                    size={18}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+
+                {showCampusDropdown && (
+                  <View style={styles.dropdownMenu}>
+                    {CAMPUS_OPTIONS.map((option) => (
+                      <TouchableOpacity
+                        key={option}
+                        style={styles.dropdownOption}
+                        onPress={() => {
+                          setCampus(option);
+                          setShowCampusDropdown(false);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.dropdownOptionText}>{option}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                <View style={[styles.inputContainer, styles.roomInputContainer]}>
                   <Ionicons name="location-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
-                    placeholder="e.g., C-105"
+                    placeholder="Room no (e.g., C-105)"
                     placeholderTextColor="#9CA3AF"
-                    value={classroom}
-                    onChangeText={setClassroom}
+                    value={roomNo}
+                    onChangeText={setRoomNo}
                   />
                 </View>
               </View>
@@ -266,16 +311,40 @@ const RequestSubstituteScreen = () => {
           ) : (
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Campus</Text>
-              <View style={styles.inputContainer}>
+
+              <TouchableOpacity
+                style={styles.inputContainer}
+                onPress={() => setShowCampusDropdown((prev) => !prev)}
+                activeOpacity={0.8}
+              >
                 <Ionicons name="business-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g., Campus 6"
-                  placeholderTextColor="#9CA3AF"
-                  value={campus}
-                  onChangeText={setCampus}
+                <Text style={[styles.dropdownText, !campus && styles.dropdownPlaceholder]}>
+                  {campus || 'Select campus'}
+                </Text>
+                <Ionicons
+                  name={showCampusDropdown ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#9CA3AF"
                 />
-              </View>
+              </TouchableOpacity>
+
+              {showCampusDropdown && (
+                <View style={styles.dropdownMenu}>
+                  {CAMPUS_OPTIONS.map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={styles.dropdownOption}
+                      onPress={() => {
+                        setCampus(option);
+                        setShowCampusDropdown(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dropdownOptionText}>{option}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
           )}
 
@@ -405,6 +474,19 @@ const parseTimeString = (timeValue: string) => {
   return result;
 };
 
+const parseClassroomDetails = (classroomValue: string) => {
+  if (!classroomValue) {
+    return { campus: '', roomNo: '' };
+  }
+
+  const parts = classroomValue.split(' - ');
+  if (parts.length >= 2) {
+    return { campus: parts[0], roomNo: parts.slice(1).join(' - ') };
+  }
+
+  return { campus: '', roomNo: classroomValue };
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -524,6 +606,36 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     color: '#1F2937',
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1F2937',
+  },
+  dropdownPlaceholder: {
+    color: '#9CA3AF',
+  },
+  dropdownMenu: {
+    marginTop: 8,
+    marginBottom: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    overflow: 'hidden',
+  },
+  dropdownOption: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownOptionText: {
+    fontSize: 15,
+    color: '#1F2937',
+  },
+  roomInputContainer: {
+    marginTop: 10,
   },
   sectionDivider: {
     height: 1,

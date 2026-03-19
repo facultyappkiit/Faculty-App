@@ -10,14 +10,46 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
+import * as DocumentPicker from 'expo-document-picker';
+import { useState } from 'react';
 
 const AccountScreen = () => {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const [selectedScheduleFile, setSelectedScheduleFile] = useState<string | null>(null);
 
   const handleLogout = async () => {
     await logout();
     router.replace('/login' as any);
+  };
+
+  const handleUploadSchedule = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) {
+        return;
+      }
+
+      const pickedFile = result.assets[0];
+      const lowerName = pickedFile.name.toLowerCase();
+      if (!lowerName.endsWith('.xls') && !lowerName.endsWith('.xlsx')) {
+        alert('Please select an Excel file (.xls or .xlsx).');
+        return;
+      }
+
+      setSelectedScheduleFile(pickedFile.name);
+      alert('Schedule selected successfully. Upload API integration will be added next.');
+    } catch {
+      alert('Unable to open file picker. Please try again.');
+    }
   };
 
   if (!user) {
@@ -150,6 +182,26 @@ const AccountScreen = () => {
                 <Text style={styles.infoValue}>KIIT University</Text>
               </View>
             </View>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Class Schedule</Text>
+
+          <View style={styles.infoCard}>
+            <TouchableOpacity
+              style={styles.uploadButton}
+              onPress={handleUploadSchedule}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="cloud-upload-outline" size={20} color="#0F766E" style={{ marginRight: 8 }} />
+              <Text style={styles.uploadButtonText}>Upload class schedule</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.uploadHint}>Accepted format: .xls, .xlsx</Text>
+            {selectedScheduleFile && (
+              <Text style={styles.selectedFileText}>Selected: {selectedScheduleFile}</Text>
+            )}
           </View>
         </View>
 
@@ -317,6 +369,36 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#F0F0F0',
     marginLeft: 70,
+  },
+  uploadButton: {
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#99F6E4',
+    backgroundColor: '#F0FDFA',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 8,
+    marginTop: 8,
+  },
+  uploadButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F766E',
+  },
+  uploadHint: {
+    fontSize: 12,
+    color: '#6B7280',
+    marginTop: 10,
+    marginHorizontal: 12,
+  },
+  selectedFileText: {
+    fontSize: 13,
+    color: '#1F2937',
+    marginTop: 6,
+    marginHorizontal: 12,
+    fontWeight: '500',
   },
   logoutButton: {
     marginHorizontal: 20,
