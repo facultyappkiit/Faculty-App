@@ -529,11 +529,15 @@ export const uploadClassSchedule = async (
   const token = await getAccessToken();
   const formData = new FormData();
 
-  formData.append('schedule_file', {
+  const filePart = {
     uri: file.uri,
     name: file.name,
     type: file.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  } as any);
+  } as any;
+
+  // Keep both keys for backward compatibility with deployed backends.
+  formData.append('schedule_file', filePart);
+  formData.append('file', filePart);
 
   const response = await fetch(`${API_BASE_URL}/users/${userId}/class-schedule/upload`, {
     method: 'POST',

@@ -104,6 +104,184 @@ def _parse_duration_minutes(value) -> int:
     return duration
 
 
+def _is_empty_schedule_cell(value) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        return True
+    # Treat placeholders like ---- and --- as empty.
+    return all(ch == "-" for ch in text)
+
+
+def _parse_time_slot_label(value) -> tuple[time, time] | None:
+    raw = str(value or "").strip().replace(" ", "")
+    if "-" not in raw:
+        return None
+
+    left, right = raw.split("-", 1)
+    if not left or not right:
+        return None
+
+    if ":" in left or ":" in right:
+        try:
+            start_t = _parse_time_value(left)
+            end_t = _parse_time_value(right)
+            if end_t <= start_t:
+                end_dt = datetime.combine(datetime.utcnow().date(), end_t) + timedelta(hours=12)
+                end_t = end_dt.time().replace(microsecond=0)
+            return start_t, end_t
+        except ValueError:
+            return None
+
+    if not (left.isdigit() and right.isdigit()):
+        return None
+
+    start_hour = int(left)
+    end_hour = int(right)
+
+    # Timetable slots like 1-2, 2-3, ... are afternoon periods in this sheet style.
+    if 1 <= start_hour <= 7:
+        start_hour += 12
+    if 1 <= end_hour <= 7:
+        end_hour += 12
+    if end_hour <= start_hour:
+        end_hour += 12
+
+    try:
+        return time(start_hour % 24, 0, 0), time(end_hour % 24, 0, 0)
+    except ValueError:
+        return None
+
+
+def _extract_matrix_schedule_rows(rows: list[tuple], file_name: str) -> list[dict]:
+    if not rows:
+        return []
+
+    header_row_idx = None
+    slot_columns: list[tuple[int, str, tuple[time, time]]] = []
+
+    for idx, row in enumerate(rows):
+        parsed_slots = []
+        for col_idx, cell in enumerate(row):
+            parsed = _parse_time_slot_label(cell)
+            if parsed:
+                parsed_slots.append((col_idx, str(cell).strip(), parsed))
+        if len(parsed_slots) >= 3:
+            header_row_idx = idx
+            slot_columns = parsed_slots
+            break
+
+    if header_row_idx is None:
+        return []
+
+    records: list[dict] = []
+    for row in rows[header_row_idx + 1:]:
+        if not row:
+            continue
+
+        day_value = row[0] if len(row) > 0 else None
+        try:
+            day_of_week = _parse_day_of_week(day_value)
+        except ValueError:
+            continue
+
+        for col_idx, _, (start_t, end_t) in slot_columns:
+            if col_idx >= len(row):
+                continue
+            cell_value = row[col_idx]
+            if _is_empty_schedule_cell(cell_value):
+                continue
+
+            subject_text = str(cell_value).strip()
+            if len(subject_text) > 120:
+                subject_text = subject_text[:120]
+
+            records.append(
+                {
+                    "day_of_week": day_of_week,
+                    "start_time": start_t.strftime("%H:%M:%S"),
+                    "end_time": end_t.strftime("%H:%M:%S"),
+                    "subject": subject_text or None,
+                    "source_file": file_name,
+                }
+            )
+
+    return records
+
+
+def _extract_columnar_schedule_rows(rows: list[tuple], file_name: str) -> list[dict]:
+    records: list[dict] = []
+
+    header_index = None
+    day_idx = None
+    start_idx = None
+    end_idx = None
+    duration_idx = None
+    subject_idx = None
+
+    for idx, row in enumerate(rows):
+        normalized = [_normalize_header(cell) for cell in row]
+        candidate_day_idx = _find_header_index(normalized, ["day", "weekday"])
+        candidate_start_idx = _find_header_index(normalized, ["starttime", "start", "time"])
+        candidate_end_idx = _find_header_index(normalized, ["endtime", "end"])
+        candidate_duration_idx = _find_header_index(normalized, ["duration", "minutes", "mins"])
+        candidate_subject_idx = _find_header_index(normalized, ["subject", "course", "class"])
+
+        if candidate_day_idx is not None and candidate_start_idx is not None and (
+            candidate_end_idx is not None or candidate_duration_idx is not None
+        ):
+            header_index = idx
+            day_idx = candidate_day_idx
+            start_idx = candidate_start_idx
+            end_idx = candidate_end_idx
+            duration_idx = candidate_duration_idx
+            subject_idx = candidate_subject_idx
+            break
+
+    if header_index is None or day_idx is None or start_idx is None:
+        return []
+
+    for row in rows[header_index + 1:]:
+        if not any(cell is not None and str(cell).strip() != "" for cell in row):
+            continue
+
+        try:
+            day_of_week = _parse_day_of_week(row[day_idx] if day_idx < len(row) else None)
+            start_time = _parse_time_value(row[start_idx] if start_idx < len(row) else None)
+
+            end_time = None
+            if end_idx is not None and end_idx < len(row) and row[end_idx] is not None and str(row[end_idx]).strip() != "":
+                end_time = _parse_time_value(row[end_idx])
+            elif duration_idx is not None and duration_idx < len(row):
+                duration = _parse_duration_minutes(row[duration_idx])
+                end_dt = datetime.combine(datetime.utcnow().date(), start_time) + timedelta(minutes=duration)
+                if end_dt.date() != datetime.utcnow().date():
+                    raise ValueError("Duration crosses midnight")
+                end_time = end_dt.time().replace(microsecond=0)
+
+            if end_time is None or end_time <= start_time:
+                raise ValueError("End time must be after start time")
+
+            subject = None
+            if subject_idx is not None and subject_idx < len(row) and row[subject_idx] is not None:
+                subject = str(row[subject_idx]).strip() or None
+
+            records.append(
+                {
+                    "day_of_week": day_of_week,
+                    "start_time": start_time.strftime("%H:%M:%S"),
+                    "end_time": end_time.strftime("%H:%M:%S"),
+                    "subject": subject,
+                    "source_file": file_name,
+                }
+            )
+        except ValueError:
+            continue
+
+    return records
+
+
 def _extract_schedule_rows(upload_file: UploadFile) -> list[dict]:
     file_name = upload_file.filename or "schedule.xlsx"
     lower_name = file_name.lower()
@@ -129,87 +307,21 @@ def _extract_schedule_rows(upload_file: UploadFile) -> list[dict]:
             detail=f"Unable to read Excel file: {str(exc)}"
         )
 
-    records: list[dict] = []
-
     for worksheet in workbook.worksheets:
         rows = list(worksheet.iter_rows(values_only=True))
         if not rows:
             continue
 
-        header_index = None
-        day_idx = None
-        start_idx = None
-        end_idx = None
-        duration_idx = None
-        subject_idx = None
+        records = _extract_columnar_schedule_rows(rows, file_name)
+        if not records:
+            records = _extract_matrix_schedule_rows(rows, file_name)
+        if records:
+            return records
 
-        for idx, row in enumerate(rows):
-            normalized = [_normalize_header(cell) for cell in row]
-            candidate_day_idx = _find_header_index(normalized, ["day", "weekday"])
-            candidate_start_idx = _find_header_index(normalized, ["starttime", "start", "time"])
-            candidate_end_idx = _find_header_index(normalized, ["endtime", "end"])
-            candidate_duration_idx = _find_header_index(normalized, ["duration", "minutes", "mins"])
-            candidate_subject_idx = _find_header_index(normalized, ["subject", "course", "class"])
-
-            if candidate_day_idx is not None and candidate_start_idx is not None and (
-                candidate_end_idx is not None or candidate_duration_idx is not None
-            ):
-                header_index = idx
-                day_idx = candidate_day_idx
-                start_idx = candidate_start_idx
-                end_idx = candidate_end_idx
-                duration_idx = candidate_duration_idx
-                subject_idx = candidate_subject_idx
-                break
-
-        if header_index is None or day_idx is None or start_idx is None:
-            continue
-
-        for row in rows[header_index + 1:]:
-            if not any(cell is not None and str(cell).strip() != "" for cell in row):
-                continue
-
-            try:
-                day_of_week = _parse_day_of_week(row[day_idx] if day_idx < len(row) else None)
-                start_time = _parse_time_value(row[start_idx] if start_idx < len(row) else None)
-
-                end_time = None
-                if end_idx is not None and end_idx < len(row) and row[end_idx] is not None and str(row[end_idx]).strip() != "":
-                    end_time = _parse_time_value(row[end_idx])
-                elif duration_idx is not None and duration_idx < len(row):
-                    duration = _parse_duration_minutes(row[duration_idx])
-                    end_dt = datetime.combine(datetime.utcnow().date(), start_time) + timedelta(minutes=duration)
-                    if end_dt.date() != datetime.utcnow().date():
-                        raise ValueError("Duration crosses midnight")
-                    end_time = end_dt.time().replace(microsecond=0)
-
-                if end_time is None or end_time <= start_time:
-                    raise ValueError("End time must be after start time")
-
-                subject = None
-                if subject_idx is not None and subject_idx < len(row) and row[subject_idx] is not None:
-                    subject = str(row[subject_idx]).strip() or None
-
-                records.append(
-                    {
-                        "day_of_week": day_of_week,
-                        "start_time": start_time.strftime("%H:%M:%S"),
-                        "end_time": end_time.strftime("%H:%M:%S"),
-                        "subject": subject,
-                        "source_file": file_name,
-                    }
-                )
-            except ValueError:
-                # Skip malformed rows instead of failing the entire upload.
-                continue
-
-    if not records:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No valid schedule rows found. Required columns: day, start time, and end time or duration"
-        )
-
-    return records
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="No valid schedule rows found. Use either day/start/end columns or the timetable grid format"
+    )
 
 
 class AdminCreateUser(BaseModel):
@@ -598,7 +710,8 @@ async def log_push_token_debug(user_id: int, payload: dict, current_user: TokenD
 @router.post("/{user_id}/class-schedule/upload")
 async def upload_class_schedule(
     user_id: int,
-    schedule_file: UploadFile = File(...),
+    schedule_file: Optional[UploadFile] = File(None),
+    file: Optional[UploadFile] = File(None),
     current_user: TokenData = Depends(get_current_user),
 ):
     """
@@ -612,6 +725,13 @@ async def upload_class_schedule(
         )
 
     supabase = get_supabase()
+    upload_file = schedule_file or file
+
+    if upload_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing file. Send multipart field named 'schedule_file' or 'file'"
+        )
 
     try:
         user_exists = supabase.table("users")\
@@ -625,7 +745,7 @@ async def upload_class_schedule(
                 detail="User not found"
             )
 
-        schedule_rows = _extract_schedule_rows(schedule_file)
+        schedule_rows = _extract_schedule_rows(upload_file)
         payload = [{"user_id": user_id, **row} for row in schedule_rows]
 
         supabase.table("teacher_class_schedules").delete().eq("user_id", user_id).execute()
@@ -637,7 +757,7 @@ async def upload_class_schedule(
             "user_id": user_id,
             "total_slots": len(schedule_rows),
             "days_covered": days_covered,
-            "source_file": schedule_file.filename,
+            "source_file": upload_file.filename,
         }
 
     except HTTPException:

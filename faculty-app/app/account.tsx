@@ -43,8 +43,8 @@ const AccountScreen = () => {
 
       const pickedFile = result.assets[0];
       const lowerName = pickedFile.name.toLowerCase();
-      if (!lowerName.endsWith('.xls') && !lowerName.endsWith('.xlsx')) {
-        alert('Please select an Excel file (.xls or .xlsx).');
+      if (!lowerName.endsWith('.xlsx')) {
+        alert('Please select an Excel .xlsx file.');
         return;
       }
 
@@ -226,7 +226,7 @@ const AccountScreen = () => {
               )}
             </TouchableOpacity>
 
-            <Text style={styles.uploadHint}>Accepted format: .xls, .xlsx</Text>
+            <Text style={styles.uploadHint}>Accepted format: .xlsx</Text>
             {selectedScheduleFile && (
               <Text style={styles.selectedFileText}>Selected: {selectedScheduleFile}</Text>
             )}
