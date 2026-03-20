@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, status, Depends, Body
 from typing import List
 from datetime import datetime, date as date_type, time as time_type, timedelta
-from pydantic import ValidationError
 
 from database import get_supabase
 from models import (
@@ -634,14 +633,7 @@ async def update_request(
                     value = None
             normalized_update[key] = value
 
-        try:
-            update_data = SubstituteRequestUpdate(**normalized_update).model_dump(exclude_unset=True)
-        except ValidationError as e:
-            first_error = e.errors()[0] if e.errors() else None
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(first_error.get("msg") if first_error else "Invalid update payload"),
-            )
+        update_data = normalized_update
 
         if not update_data:
             raise HTTPException(
