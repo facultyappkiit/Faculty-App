@@ -1,13 +1,215 @@
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import List, Optional
 import bcrypt
+from datetime import datetime, time, timedelta
+from openpyxl import load_workbook
 
 from database import get_supabase
 from models import UserResponse, UserUpdate, PushTokenUpdate
 from middleware.auth import get_current_user, get_current_admin, get_super_admin, TokenData
 
 router = APIRouter()
+
+
+DAY_NAME_TO_INDEX = {
+    "monday": 0,
+    "mon": 0,
+    "tuesday": 1,
+    "tue": 1,
+    "tues": 1,
+    "wednesday": 2,
+    "wed": 2,
+    "thursday": 3,
+    "thu": 3,
+    "thur": 3,
+    "thurs": 3,
+    "friday": 4,
+    "fri": 4,
+    "saturday": 5,
+    "sat": 5,
+    "sunday": 6,
+    "sun": 6,
+}
+
+
+def _normalize_header(value) -> str:
+    if value is None:
+        return ""
+    return "".join(ch for ch in str(value).strip().lower() if ch.isalnum())
+
+
+def _find_header_index(headers: list[str], options: list[str]) -> int | None:
+    for index, header in enumerate(headers):
+        for option in options:
+            if option in header:
+                return index
+    return None
+
+
+def _parse_day_of_week(value) -> int:
+    if value is None:
+        raise ValueError("Missing day value")
+
+    if isinstance(value, (int, float)):
+        numeric = int(value)
+        if 0 <= numeric <= 6:
+            return numeric
+        if 1 <= numeric <= 7:
+            return numeric - 1
+
+    day_key = str(value).strip().lower()
+    if day_key in DAY_NAME_TO_INDEX:
+        return DAY_NAME_TO_INDEX[day_key]
+
+    raise ValueError(f"Invalid day value: {value}")
+
+
+def _parse_time_value(value) -> time:
+    if value is None:
+        raise ValueError("Missing time value")
+
+    if isinstance(value, datetime):
+        return value.time().replace(microsecond=0)
+    if isinstance(value, time):
+        return value.replace(microsecond=0)
+    if isinstance(value, (int, float)):
+        total_seconds = int(round(float(value) * 24 * 60 * 60)) % (24 * 60 * 60)
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return time(hour=hours, minute=minutes, second=seconds)
+
+    raw = str(value).strip()
+    for fmt in ["%H:%M", "%H:%M:%S", "%I:%M %p", "%I:%M%p"]:
+        try:
+            return datetime.strptime(raw, fmt).time().replace(microsecond=0)
+        except ValueError:
+            continue
+
+    raise ValueError(f"Invalid time value: {value}")
+
+
+def _parse_duration_minutes(value) -> int:
+    if value is None or str(value).strip() == "":
+        raise ValueError("Missing duration value")
+
+    if isinstance(value, (int, float)):
+        duration = int(value)
+    else:
+        duration = int(float(str(value).strip()))
+
+    if duration <= 0:
+        raise ValueError(f"Invalid duration value: {value}")
+    return duration
+
+
+def _extract_schedule_rows(upload_file: UploadFile) -> list[dict]:
+    file_name = upload_file.filename or "schedule.xlsx"
+    lower_name = file_name.lower()
+
+    if lower_name.endswith(".xls"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=".xls format is not supported yet. Please upload .xlsx"
+        )
+
+    if not lower_name.endswith(".xlsx"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported file type. Please upload an Excel .xlsx file"
+        )
+
+    try:
+        upload_file.file.seek(0)
+        workbook = load_workbook(upload_file.file, data_only=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unable to read Excel file: {str(exc)}"
+        )
+
+    records: list[dict] = []
+
+    for worksheet in workbook.worksheets:
+        rows = list(worksheet.iter_rows(values_only=True))
+        if not rows:
+            continue
+
+        header_index = None
+        day_idx = None
+        start_idx = None
+        end_idx = None
+        duration_idx = None
+        subject_idx = None
+
+        for idx, row in enumerate(rows):
+            normalized = [_normalize_header(cell) for cell in row]
+            candidate_day_idx = _find_header_index(normalized, ["day", "weekday"])
+            candidate_start_idx = _find_header_index(normalized, ["starttime", "start", "time"])
+            candidate_end_idx = _find_header_index(normalized, ["endtime", "end"])
+            candidate_duration_idx = _find_header_index(normalized, ["duration", "minutes", "mins"])
+            candidate_subject_idx = _find_header_index(normalized, ["subject", "course", "class"])
+
+            if candidate_day_idx is not None and candidate_start_idx is not None and (
+                candidate_end_idx is not None or candidate_duration_idx is not None
+            ):
+                header_index = idx
+                day_idx = candidate_day_idx
+                start_idx = candidate_start_idx
+                end_idx = candidate_end_idx
+                duration_idx = candidate_duration_idx
+                subject_idx = candidate_subject_idx
+                break
+
+        if header_index is None or day_idx is None or start_idx is None:
+            continue
+
+        for row in rows[header_index + 1:]:
+            if not any(cell is not None and str(cell).strip() != "" for cell in row):
+                continue
+
+            try:
+                day_of_week = _parse_day_of_week(row[day_idx] if day_idx < len(row) else None)
+                start_time = _parse_time_value(row[start_idx] if start_idx < len(row) else None)
+
+                end_time = None
+                if end_idx is not None and end_idx < len(row) and row[end_idx] is not None and str(row[end_idx]).strip() != "":
+                    end_time = _parse_time_value(row[end_idx])
+                elif duration_idx is not None and duration_idx < len(row):
+                    duration = _parse_duration_minutes(row[duration_idx])
+                    end_dt = datetime.combine(datetime.utcnow().date(), start_time) + timedelta(minutes=duration)
+                    if end_dt.date() != datetime.utcnow().date():
+                        raise ValueError("Duration crosses midnight")
+                    end_time = end_dt.time().replace(microsecond=0)
+
+                if end_time is None or end_time <= start_time:
+                    raise ValueError("End time must be after start time")
+
+                subject = None
+                if subject_idx is not None and subject_idx < len(row) and row[subject_idx] is not None:
+                    subject = str(row[subject_idx]).strip() or None
+
+                records.append(
+                    {
+                        "day_of_week": day_of_week,
+                        "start_time": start_time.strftime("%H:%M:%S"),
+                        "end_time": end_time.strftime("%H:%M:%S"),
+                        "subject": subject,
+                        "source_file": file_name,
+                    }
+                )
+            except ValueError:
+                # Skip malformed rows instead of failing the entire upload.
+                continue
+
+    if not records:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid schedule rows found. Required columns: day, start time, and end time or duration"
+        )
+
+    return records
 
 
 class AdminCreateUser(BaseModel):
@@ -391,6 +593,60 @@ async def log_push_token_debug(user_id: int, payload: dict, current_user: TokenD
         )
     print(f"[PUSH-DEBUG] user_id={user_id} payload={payload}")
     return {"message": "Debug state logged"}
+
+
+@router.post("/{user_id}/class-schedule/upload")
+async def upload_class_schedule(
+    user_id: int,
+    schedule_file: UploadFile = File(...),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Upload and replace a teacher's weekly class schedule from an Excel file.
+    Users can upload only their own schedule, admins can upload for any user.
+    """
+    if current_user.token_type != "admin" and current_user.user_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to upload this schedule"
+        )
+
+    supabase = get_supabase()
+
+    try:
+        user_exists = supabase.table("users")\
+            .select("id")\
+            .eq("id", user_id)\
+            .execute()
+
+        if not user_exists.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        schedule_rows = _extract_schedule_rows(schedule_file)
+        payload = [{"user_id": user_id, **row} for row in schedule_rows]
+
+        supabase.table("teacher_class_schedules").delete().eq("user_id", user_id).execute()
+        supabase.table("teacher_class_schedules").insert(payload).execute()
+
+        days_covered = sorted({row["day_of_week"] for row in schedule_rows})
+        return {
+            "message": "Class schedule uploaded successfully",
+            "user_id": user_id,
+            "total_slots": len(schedule_rows),
+            "days_covered": days_covered,
+            "source_file": schedule_file.filename,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload class schedule: {str(e)}"
+        )
 
 
 @router.delete("/{user_id}")

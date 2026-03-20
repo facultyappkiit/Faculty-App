@@ -44,6 +44,20 @@ CREATE TABLE IF NOT EXISTS substitute_requests (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
 
+-- Weekly class schedule table (used for availability filtering)
+CREATE TABLE IF NOT EXISTS teacher_class_schedules (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6), -- 0=Monday, 6=Sunday
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    subject VARCHAR(120),
+    source_file VARCHAR(255),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+    CHECK (start_time < end_time)
+);
+
 -- =============================================
 -- OPTION 2: MIGRATION (Existing Database)
 -- Run this if you already have tables created
@@ -80,6 +94,24 @@ BEGIN
         ALTER TABLE substitute_requests ADD COLUMN campus VARCHAR(100);
     END IF;
 
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'teacher_class_schedules'
+    ) THEN
+        CREATE TABLE teacher_class_schedules (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            day_of_week SMALLINT NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+            start_time TIME NOT NULL,
+            end_time TIME NOT NULL,
+            subject VARCHAR(120),
+            source_file VARCHAR(255),
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
+            CHECK (start_time < end_time)
+        );
+    END IF;
+
     ALTER TABLE substitute_requests ALTER COLUMN subject DROP NOT NULL;
     ALTER TABLE substitute_requests ALTER COLUMN classroom DROP NOT NULL;
 
@@ -105,6 +137,9 @@ CREATE INDEX IF NOT EXISTS idx_users_push_token ON users(push_token);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON substitute_requests(status);
 CREATE INDEX IF NOT EXISTS idx_requests_teacher ON substitute_requests(teacher_id);
 CREATE INDEX IF NOT EXISTS idx_requests_date ON substitute_requests(date);
+CREATE INDEX IF NOT EXISTS idx_teacher_schedule_user ON teacher_class_schedules(user_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_schedule_day ON teacher_class_schedules(day_of_week);
+CREATE INDEX IF NOT EXISTS idx_teacher_schedule_window ON teacher_class_schedules(start_time, end_time);
 
 -- =============================================
 -- ROW LEVEL SECURITY (RLS)
@@ -112,16 +147,21 @@ CREATE INDEX IF NOT EXISTS idx_requests_date ON substitute_requests(date);
 
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE substitute_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE teacher_class_schedules ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist (to avoid conflicts)
 DROP POLICY IF EXISTS "Allow all operations on users" ON users;
 DROP POLICY IF EXISTS "Allow all operations on substitute_requests" ON substitute_requests;
+DROP POLICY IF EXISTS "Allow all operations on teacher_class_schedules" ON teacher_class_schedules;
 
 -- Create policies for access
 CREATE POLICY "Allow all operations on users" ON users
     FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Allow all operations on substitute_requests" ON substitute_requests
+    FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow all operations on teacher_class_schedules" ON teacher_class_schedules
     FOR ALL USING (true) WITH CHECK (true);
 
 -- =============================================
@@ -139,6 +179,12 @@ $$ language 'plpgsql';
 DROP TRIGGER IF EXISTS update_substitute_requests_updated_at ON substitute_requests;
 CREATE TRIGGER update_substitute_requests_updated_at
     BEFORE UPDATE ON substitute_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_teacher_class_schedules_updated_at ON teacher_class_schedules;
+CREATE TRIGGER update_teacher_class_schedules_updated_at
+    BEFORE UPDATE ON teacher_class_schedules
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 

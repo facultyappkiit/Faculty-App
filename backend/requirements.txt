@@ -9,3 +9,4 @@ exponent-server-sdk
 httpx
 PyJWT
 bcrypt
+openpyxl

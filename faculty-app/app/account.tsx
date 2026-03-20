@@ -6,17 +6,20 @@ import {
   SafeAreaView,
   StatusBar,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
+import { uploadClassSchedule } from '../services/api';
 
 const AccountScreen = () => {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [selectedScheduleFile, setSelectedScheduleFile] = useState<string | null>(null);
+  const [isUploadingSchedule, setIsUploadingSchedule] = useState(false);
 
   const handleLogout = async () => {
     await logout();
@@ -45,10 +48,25 @@ const AccountScreen = () => {
         return;
       }
 
+      if (!user?.id) {
+        alert('Unable to identify your account. Please log in again.');
+        return;
+      }
+
+      setIsUploadingSchedule(true);
+      const uploadResult = await uploadClassSchedule(user.id, {
+        uri: pickedFile.uri,
+        name: pickedFile.name,
+        mimeType: pickedFile.mimeType,
+      });
+
       setSelectedScheduleFile(pickedFile.name);
-      alert('Schedule selected successfully. Upload API integration will be added next.');
-    } catch {
-      alert('Unable to open file picker. Please try again.');
+      alert(`Schedule uploaded successfully. Total slots: ${uploadResult.total_slots ?? 0}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to upload schedule. Please try again.';
+      alert(message);
+    } finally {
+      setIsUploadingSchedule(false);
     }
   };
 
@@ -192,10 +210,20 @@ const AccountScreen = () => {
             <TouchableOpacity
               style={styles.uploadButton}
               onPress={handleUploadSchedule}
+              disabled={isUploadingSchedule}
               activeOpacity={0.8}
             >
-              <Ionicons name="cloud-upload-outline" size={20} color="#0F766E" style={{ marginRight: 8 }} />
-              <Text style={styles.uploadButtonText}>Upload class schedule</Text>
+              {isUploadingSchedule ? (
+                <>
+                  <ActivityIndicator size="small" color="#0F766E" style={{ marginRight: 8 }} />
+                  <Text style={styles.uploadButtonText}>Uploading schedule...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={20} color="#0F766E" style={{ marginRight: 8 }} />
+                  <Text style={styles.uploadButtonText}>Upload class schedule</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <Text style={styles.uploadHint}>Accepted format: .xls, .xlsx</Text>

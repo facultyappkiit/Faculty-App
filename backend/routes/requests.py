@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import List
+from datetime import datetime, date as date_type, time as time_type, timedelta
 
 from database import get_supabase
 from models import (
@@ -9,10 +10,100 @@ from models import (
     AcceptRequest,
     CancelRequest
 )
-from services.push_notifications import notify_all_faculty_except, notify_user
+from services.push_notifications import notify_faculty_by_ids, notify_user
 from middleware.auth import get_current_user, get_current_admin, TokenData
 
 router = APIRouter()
+
+
+TIME_PARSE_FORMATS = [
+    "%H:%M",
+    "%H:%M:%S",
+    "%I:%M %p",
+    "%I:%M%p",
+]
+
+
+def _parse_time_value(value: str) -> time_type:
+    raw = (value or "").strip()
+    for fmt in TIME_PARSE_FORMATS:
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except ValueError:
+            continue
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Invalid time format: {value}"
+    )
+
+
+def _compute_time_window(start_value: str, duration_minutes: int) -> tuple[time_type, time_type]:
+    start_time = _parse_time_value(start_value)
+    duration = int(duration_minutes or 0)
+    if duration <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duration must be greater than 0"
+        )
+
+    start_dt = datetime.combine(datetime.utcnow().date(), start_time)
+    end_dt = start_dt + timedelta(minutes=duration)
+    if end_dt.date() != start_dt.date():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Duration cannot cross midnight"
+        )
+
+    return start_time, end_dt.time()
+
+
+def _time_to_db_string(value: time_type) -> str:
+    return value.strftime("%H:%M:%S")
+
+
+def _parse_request_date(value) -> date_type:
+    if isinstance(value, date_type):
+        return value
+    if value is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Date is required")
+    try:
+        return datetime.strptime(str(value), "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid date format: {value}. Expected YYYY-MM-DD"
+        )
+
+
+def _get_available_faculty_ids(exclude_user_id: int, request: dict) -> list[int]:
+    supabase = get_supabase()
+
+    users_result = supabase.table("users")\
+        .select("id")\
+        .neq("id", exclude_user_id)\
+        .execute()
+
+    candidate_ids = [user["id"] for user in (users_result.data or []) if user.get("id") is not None]
+    if not candidate_ids:
+        return []
+
+    request_date = _parse_request_date(request.get("date"))
+    request_time = request.get("time")
+    duration = request.get("duration")
+
+    start_time, end_time = _compute_time_window(request_time, duration)
+    weekday = request_date.weekday()  # Monday=0 ... Sunday=6
+
+    conflicts_result = supabase.table("teacher_class_schedules")\
+        .select("user_id")\
+        .in_("user_id", candidate_ids)\
+        .eq("day_of_week", weekday)\
+        .lt("start_time", _time_to_db_string(end_time))\
+        .gt("end_time", _time_to_db_string(start_time))\
+        .execute()
+
+    busy_ids = {row["user_id"] for row in (conflicts_result.data or []) if row.get("user_id") is not None}
+    return [user_id for user_id in candidate_ids if user_id not in busy_ids]
 
 
 def _request_title(request: dict) -> str:
@@ -362,9 +453,10 @@ async def create_request(request: SubstituteRequestCreate, current_user: TokenDa
         
         req = result.data[0]
         
-        # Send push notification to all other faculty
-        await notify_all_faculty_except(
-            exclude_user_id=request.teacher_id,
+        # Notify only faculty who are free during the requested slot.
+        available_teacher_ids = _get_available_faculty_ids(request.teacher_id, req)
+        await notify_faculty_by_ids(
+            user_ids=available_teacher_ids,
             title="📚 New Substitute Request",
             body=f"{teacher_name} needs a substitute for {_request_summary(new_request)}",
             data={
@@ -557,8 +649,9 @@ async def update_request(
                 }
             )
         else:
-            await notify_all_faculty_except(
-                exclude_user_id=teacher_id,
+            available_teacher_ids = _get_available_faculty_ids(teacher_id, req)
+            await notify_faculty_by_ids(
+                user_ids=available_teacher_ids,
                 title="✏️ Substitute Request Updated",
                 body=f"{teacher_name} updated a request for {_request_summary(req)}",
                 data={

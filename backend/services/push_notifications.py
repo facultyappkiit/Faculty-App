@@ -131,6 +131,46 @@ async def notify_all_faculty_except(exclude_user_id: int, title: str, body: str,
         traceback.print_exc()
 
 
+async def notify_faculty_by_ids(user_ids: list[int], title: str, body: str, data: dict = None):
+    """
+    Send notification to a specific list of faculty user IDs.
+    Used for availability-filtered request notifications.
+    """
+    if not user_ids:
+        print("[PUSH] No recipient user IDs provided")
+        return
+
+    supabase = get_supabase()
+
+    try:
+        result = supabase.table("users")\
+            .select("id, name, push_token")\
+            .in_("id", user_ids)\
+            .execute()
+
+        print(f"[PUSH] Checking {len(result.data)} targeted users for push tokens...")
+
+        tokens = []
+        for user in result.data:
+            token = user.get("push_token")
+            if _is_valid_expo_push_token(token):
+                tokens.append(token)
+                print(f"[PUSH] Will notify: {user['name']} (ID: {user['id']}) - Token: {token[:30]}...")
+            else:
+                print(f"[PUSH] Skipping: {user['name']} (ID: {user['id']}) - No token")
+
+        if tokens:
+            print(f"[PUSH] Sending to {len(tokens)} targeted faculty members")
+            send_push_to_multiple(tokens, title, body, data)
+        else:
+            print("[PUSH] No targeted faculty with valid push tokens")
+
+    except Exception as e:
+        print(f"[PUSH] Error in notify_faculty_by_ids: {e}")
+        import traceback
+        traceback.print_exc()
+
+
 async def notify_user(user_id: int, title: str, body: str, data: dict = None):
     """
     Send notification to a specific user.

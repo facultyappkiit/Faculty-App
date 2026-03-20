@@ -64,9 +64,13 @@ const handleUnauthorized = async () => {
 
 const isUnauthorized = (response: Response) => response.status === 401 || response.status === 403;
 
+const getAccessToken = async (): Promise<string | null> => {
+  return AsyncStorage.getItem('token');
+};
+
 // Helper to get auth headers with JWT token
 const getAuthHeaders = async (): Promise<HeadersInit> => {
-  const token = await AsyncStorage.getItem('token');
+  const token = await getAccessToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { 'Authorization': `Bearer ${token}` } : {})
@@ -515,5 +519,37 @@ export const updateUser = async (userId: number, data: {
     throw new Error(error.detail || 'Failed to update user');
   }
   
+  return response.json();
+};
+
+export const uploadClassSchedule = async (
+  userId: number,
+  file: { uri: string; name: string; mimeType?: string | null }
+) => {
+  const token = await getAccessToken();
+  const formData = new FormData();
+
+  formData.append('schedule_file', {
+    uri: file.uri,
+    name: file.name,
+    type: file.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  } as any);
+
+  const response = await fetch(`${API_BASE_URL}/users/${userId}/class-schedule/upload`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    if (isUnauthorized(response)) {
+      await handleUnauthorized();
+      throw new Error(UNAUTHORIZED_MESSAGE);
+    }
+    throw new Error(await readErrorMessage(response, 'Failed to upload class schedule'));
+  }
+
   return response.json();
 };
