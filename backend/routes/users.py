@@ -746,7 +746,16 @@ async def upload_class_schedule(
             )
 
         schedule_rows = _extract_schedule_rows(upload_file)
-        payload = [{"teacher_id": user_id, **row} for row in schedule_rows]
+        payload = [
+            {
+                "teacher_id": user_id,
+                "day_of_week": row["day_of_week"],
+                "start_time": row["start_time"],
+                "end_time": row["end_time"],
+                "subject": row.get("subject"),
+            }
+            for row in schedule_rows
+        ]
 
         supabase.table("teacher_class_schedules").delete().eq("teacher_id", user_id).execute()
         supabase.table("teacher_class_schedules").insert(payload).execute()
