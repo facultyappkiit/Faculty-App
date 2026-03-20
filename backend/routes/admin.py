@@ -7,7 +7,7 @@ import jwt
 import os
 import secrets
 import re
-from database import get_supabase
+from database import get_supabase, get_supabase_admin
 from middleware.auth import get_current_admin, get_super_admin, TokenData
 from services.push_notifications import send_push_notification, send_push_to_multiple
 
@@ -414,6 +414,13 @@ async def invite_user(invite: InviteUserRequest, current_admin: TokenData = Depe
     Sends invite email via Supabase Auth.
     """
     supabase = get_supabase()
+    try:
+        supabase_admin = get_supabase_admin()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
     email = invite.email.lower()
     
     # Validate email format
@@ -463,11 +470,16 @@ async def invite_user(invite: InviteUserRequest, current_admin: TokenData = Depe
         
         # Send invite email via Supabase Auth
         try:
-            supabase.auth.admin.invite_user_by_email(email)
+            supabase_admin.auth.admin.invite_user_by_email(email)
             print(f"[INVITE] Sent invite to {email}")
         except Exception as email_error:
             print(f"[INVITE] Failed to send email: {email_error}")
-            # Still return success since invite is stored
+            # Roll back pending invite because email was not delivered.
+            supabase.table("pending_invites").delete().eq("invite_token", invite_token).execute()
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to send invite email: {str(email_error)}"
+            )
         
         return InviteResponse(
             success=True,
@@ -491,6 +503,13 @@ async def bulk_invite_users(bulk_invite: BulkInviteRequest, current_admin: Token
     Invite multiple users from a list (used for CSV upload).
     """
     supabase = get_supabase()
+    try:
+        supabase_admin = get_supabase_admin()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
     
     sent = 0
     failed = 0
@@ -543,9 +562,13 @@ async def bulk_invite_users(bulk_invite: BulkInviteRequest, current_admin: Token
             
             # Send invite email
             try:
-                supabase.auth.admin.invite_user_by_email(email)
+                supabase_admin.auth.admin.invite_user_by_email(email)
             except Exception as email_error:
                 print(f"[BULK-INVITE] Email failed for {email}: {email_error}")
+                supabase.table("pending_invites").delete().eq("invite_token", invite_token).execute()
+                errors.append(f"{email}: Failed to send invite email")
+                failed += 1
+                continue
             
             sent += 1
             
@@ -632,6 +655,13 @@ async def resend_invite(invite_id: int, current_admin: TokenData = Depends(get_c
     Resend invite email for a pending invite.
     """
     supabase = get_supabase()
+    try:
+        supabase_admin = get_supabase_admin()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
     
     try:
         # Get the invite
@@ -661,9 +691,13 @@ async def resend_invite(invite_id: int, current_admin: TokenData = Depends(get_c
         
         # Resend email
         try:
-            supabase.auth.admin.invite_user_by_email(invite["email"])
+            supabase_admin.auth.admin.invite_user_by_email(invite["email"])
         except Exception as email_error:
             print(f"[RESEND-INVITE] Email failed: {email_error}")
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f"Failed to resend invite email: {str(email_error)}"
+            )
         
         return {"message": f"Invite resent to {invite['email']}"}
         

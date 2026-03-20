@@ -68,7 +68,10 @@ Create a `.env` file in the backend directory:
 ```env
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
 ```
+
+Note: Admin invite endpoints require `SUPABASE_SERVICE_ROLE_KEY`. If this is missing, invite emails will fail with "User not allowed".
 
 ### 5. Run the Server
 
