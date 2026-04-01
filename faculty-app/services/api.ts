@@ -602,6 +602,7 @@ export type ClassScheduleItem = {
   start_time: string; // HH:MM:SS format
   end_time: string; // HH:MM:SS format
   subject?: string | null;
+  classroom?: string | null;
   substitute_request_id?: number | null; // If this is from an accepted substitute request
 };
 

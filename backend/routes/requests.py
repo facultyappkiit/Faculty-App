@@ -603,8 +603,7 @@ async def accept_request(request_id: int, accept_data: AcceptRequest, current_us
             "day_of_week": weekday,
             "start_time": _time_to_db_string(start_time),
             "end_time": _time_to_db_string(end_time),
-            "subject": schedule_subject,
-            "substitute_request_id": request_id,
+            "subject": schedule_subject,            "classroom": req.get("classroom"),            "substitute_request_id": request_id,
         }
 
         try:
@@ -620,6 +619,7 @@ async def accept_request(request_id: int, accept_data: AcceptRequest, current_us
                     "start_time": _time_to_db_string(start_time),
                     "end_time": _time_to_db_string(end_time),
                     "subject": schedule_subject,
+                    "classroom": req.get("classroom"),
                 }
                 schedule_result = supabase.table("teacher_class_schedules")\
                     .insert(legacy_entry)\

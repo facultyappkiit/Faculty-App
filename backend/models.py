@@ -148,6 +148,7 @@ class ClassScheduleItem(BaseModel):
     start_time: str  # HH:MM:SS format
     end_time: str  # HH:MM:SS format
     subject: Optional[str] = None
+    classroom: Optional[str] = None
     substitute_request_id: Optional[int] = None  # If this schedule is from an accepted substitute request
 
     class Config:

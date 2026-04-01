@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS teacher_class_schedules (
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     subject VARCHAR(120),
+    classroom VARCHAR(50),
     source_file VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
@@ -105,6 +106,7 @@ BEGIN
             start_time TIME NOT NULL,
             end_time TIME NOT NULL,
             subject VARCHAR(120),
+            classroom VARCHAR(50),
             source_file VARCHAR(255),
             created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()),
@@ -137,6 +139,18 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns
                    WHERE table_name = 'teacher_class_schedules' AND column_name = 'substitute_request_id') THEN
         ALTER TABLE teacher_class_schedules ADD COLUMN substitute_request_id INTEGER REFERENCES substitute_requests(id) ON DELETE CASCADE;
+    END IF;
+
+    -- Add subject column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'teacher_class_schedules' AND column_name = 'subject') THEN
+        ALTER TABLE teacher_class_schedules ADD COLUMN subject VARCHAR(120);
+    END IF;
+
+    -- Add classroom column if it doesn't exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                   WHERE table_name = 'teacher_class_schedules' AND column_name = 'classroom') THEN
+        ALTER TABLE teacher_class_schedules ADD COLUMN classroom VARCHAR(50);
     END IF;
 EXCEPTION
     WHEN others THEN

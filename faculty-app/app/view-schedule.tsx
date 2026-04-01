@@ -103,6 +103,13 @@ const ViewScheduleScreen = () => {
             <Text style={styles.subjectText}>{item.subject}</Text>
           </View>
         )}
+
+        {item.classroom && (
+          <View style={[styles.subjectContainer, { marginTop: 4 }]}>
+            <Ionicons name="business-outline" size={18} color="#6B7280" />
+            <Text style={styles.subjectText}>{item.classroom}</Text>
+          </View>
+        )}
       </View>
     </View>
   );
