@@ -207,6 +207,11 @@ def _extract_matrix_schedule_rows(rows: list[tuple], file_name: str) -> list[dic
                     subject_text = parts[0]
                     classroom_text = parts[1]
             elif '\n' in cell_str:
+                lines = [line.strip() for line in cell_str.splitlines() if line.strip()]
+                if lines:
+                    subject_text = lines[0]
+                if len(lines) > 1:
+                    classroom_text = lines[1]
 
             if len(subject_text) > 120:
                 subject_text = subject_text[:120]
