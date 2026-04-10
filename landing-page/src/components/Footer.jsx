@@ -9,9 +9,7 @@ const Footer = () => {
           {/* Column 1 */}
           <div>
             <div className="flex items-center gap-2 mb-6">
-              <div className="w-8 h-8 bg-kiit-green rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg leading-none">F</span>
-              </div>
+              <img src="/logo.png" alt="Facultyfy Logo" className="w-8 h-8 object-contain rounded-lg shadow-sm" />
               <h3 className="text-xl font-bold text-white">Facultyfy</h3>
             </div>
             <p className="text-gray-400 mb-6 max-w-xs">

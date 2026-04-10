@@ -33,8 +33,8 @@ export default function Login({ onLogin }: LoginProps) {
         <div className="bg-white rounded-2xl shadow-xl p-8">
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-2xl font-bold text-primary-600">K</span>
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-sm">
+              <img src="/logo.png" alt="Facultyfy Logo" className="w-16 h-16 object-cover" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
             <p className="text-gray-500 mt-1">Faculty Substitute System</p>

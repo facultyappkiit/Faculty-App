@@ -11,6 +11,7 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -67,7 +68,11 @@ const LoginScreen = () => {
         >
           <View style={styles.logoSection}>
             <View style={styles.logoIcon}>
-              <Text style={styles.logoText}>KIIT</Text>
+              <Image 
+                source={require('../assets/images/icon.png')} 
+                style={{ width: 100, height: 100, borderRadius: 24 }} 
+                resizeMode="cover"
+              />
             </View>
             <Text style={styles.title}>Faculty Portal</Text>
             <Text style={styles.subtitle}>Sign in to manage substitutions</Text>

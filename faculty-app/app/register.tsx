@@ -11,6 +11,7 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -106,7 +107,11 @@ const RegisterScreen = () => {
         >
           <View style={styles.logoSection}>
             <View style={styles.logoIcon}>
-              <Text style={styles.logoText}>KIIT</Text>
+              <Image 
+                source={require('../assets/images/icon.png')} 
+                style={{ width: 100, height: 100, borderRadius: 24 }} 
+                resizeMode="cover"
+              />
             </View>
           </View>
 

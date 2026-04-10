@@ -17,9 +17,7 @@ const Navbar = () => {
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${isScrolled ? 'bg-white/90 backdrop-blur-md shadow-sm py-4' : 'bg-transparent py-6'}`}>
       <div className="container mx-auto px-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-kiit-green rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg leading-none">F</span>
-          </div>
+          <img src="/logo.png" alt="Facultyfy Logo" className="w-8 h-8 rounded-lg object-contain" />
           <span className="text-xl font-bold text-gray-900 tracking-tight">Facultyfy</span>
         </div>
 
