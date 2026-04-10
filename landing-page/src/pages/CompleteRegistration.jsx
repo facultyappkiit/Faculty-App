@@ -175,7 +175,7 @@ const CompleteRegistration = () => {
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">Account Created Successfully!</h3>
                 <p className="text-gray-600 mb-8">
                   Welcome, <span className="font-semibold text-gray-900">{inviteData?.name}</span>!<br/>
-                  Your account has been created. Download the Faculty Substitute App to login and start using the platform.
+                  Your account has been created. Download Facultyfy to login and start using the platform.
                 </p>
 
                 <div className="bg-gray-50 rounded-xl p-4 mb-8 text-left border border-gray-100">

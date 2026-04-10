@@ -63,7 +63,7 @@ const Hero = () => {
                   <div className="w-16 h-16 bg-white/10 rounded-full mx-auto mb-4 flex items-center justify-center backdrop-blur-sm">
                     <ShieldCheck className="text-kiit-green w-8 h-8" />
                   </div>
-                  <h3 className="text-xl font-medium text-white mb-2">FacultyApp Mockup</h3>
+                  <h3 className="text-xl font-medium text-white mb-2">Facultyfy Mockup</h3>
                   <p className="text-gray-400 text-sm">App interface preview goes here</p>
                 </div>
               </div>

@@ -112,7 +112,7 @@ const RegisterScreen = () => {
 
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.subtitle}>
-            Join the KIIT Faculty Substitute System to manage your classes seamlessly.
+            Join Facultyfy to manage your classes seamlessly.
           </Text>
 
           <View style={styles.formSection}>

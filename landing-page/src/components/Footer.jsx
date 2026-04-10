@@ -12,7 +12,7 @@ const Footer = () => {
               <div className="w-8 h-8 bg-kiit-green rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-lg leading-none">F</span>
               </div>
-              <h3 className="text-xl font-bold text-white">FacultyApp</h3>
+              <h3 className="text-xl font-bold text-white">Facultyfy</h3>
             </div>
             <p className="text-gray-400 mb-6 max-w-xs">
               A seamless platform for KIIT faculty to request and accept substitute duties.
@@ -39,9 +39,9 @@ const Footer = () => {
             <h4 className="text-lg font-bold text-white mb-6">Contact</h4>
             <ul className="space-y-4">
               <li>
-                <a href="mailto:support@facultyapp.kiit.ac.in" className="flex items-center gap-3 hover:text-kiit-green transition-colors">
+                <a href="mailto:support@facultyfy.kiit.ac.in" className="flex items-center gap-3 hover:text-kiit-green transition-colors">
                   <Mail size={18} />
-                  <span>support@facultyapp.kiit.ac.in</span>
+                  <span>support@facultyfy.kiit.ac.in</span>
                 </a>
               </li>
               <li>

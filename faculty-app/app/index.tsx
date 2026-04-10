@@ -159,7 +159,7 @@ const HomeScreen = () => {
       >
         {/* Welcome Section */}
         <View style={styles.welcomeSection}>
-          <Text style={styles.portalText}>KIIT Faculty Portal</Text>
+          <Text style={styles.portalText}>Facultyfy</Text>
           <Text style={styles.welcomeText}>Welcome,</Text>
           <Text style={styles.userName}>{user.name}</Text>
         </View>

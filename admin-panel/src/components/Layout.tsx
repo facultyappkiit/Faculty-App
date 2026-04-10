@@ -57,7 +57,7 @@ export default function Layout({ children, onLogout, admin }: LayoutProps) {
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="p-6 border-b">
-            <h1 className="text-xl font-bold text-primary-600">Faculty App</h1>
+            <h1 className="text-xl font-bold text-primary-600">Facultyfy</h1>
             <p className="text-sm text-gray-500">Admin Panel</p>
           </div>
 

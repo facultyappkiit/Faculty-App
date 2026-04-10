@@ -20,7 +20,7 @@ const Navbar = () => {
           <div className="w-8 h-8 bg-kiit-green rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg leading-none">F</span>
           </div>
-          <span className="text-xl font-bold text-gray-900 tracking-tight">FacultyApp</span>
+          <span className="text-xl font-bold text-gray-900 tracking-tight">Facultyfy</span>
         </div>
 
         {/* Desktop Menu */}

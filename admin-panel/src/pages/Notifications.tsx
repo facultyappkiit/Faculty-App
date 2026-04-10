@@ -352,7 +352,7 @@ const Notifications = () => {
                   <Bell className="w-6 h-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm">Faculty App</p>
+                  <p className="font-semibold text-sm">Facultyfy</p>
                   <p className="font-medium mt-1">{title || 'Notification Title'}</p>
                   <p className="text-sm text-gray-300 mt-1">{body || 'Your notification message will appear here...'}</p>
                 </div>

@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     question: "Is it free?",
-    answer: "Yes, the Faculty Substitute App is completely free for all KIIT faculty members."
+    answer: "Yes, Facultyfy is completely free for all KIIT faculty members."
   },
   {
     question: "How do I get access?",
